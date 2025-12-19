@@ -5,6 +5,7 @@
 - [Getting Started](./getting-started.md)
 - [Authentication & Authorization](./authentication.md)
 - [Errors](./errors.md)
+- [Documentation Strategy](./documentation-strategy.md)
 
 ## Reference
 - [Endpoints Summary](./api/endpoints-summary.md)
