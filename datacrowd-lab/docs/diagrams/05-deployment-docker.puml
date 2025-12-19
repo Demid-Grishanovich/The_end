@@ -1,0 +1,23 @@
+@startuml
+title Datacrowd — Local deployment (Docker) (v1)
+
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+node "Docker network: datacrowd" {
+  node "PostgreSQL container\n(datacrowd-postgres)" as pg
+  node "Auth Service container\n(auth-service)" as auth
+  node "API Gateway container\n(api-gateway)" as gw
+}
+
+cloud "Host machine" {
+  [Postman/Browser] as client
+}
+
+client --> gw : HTTP :8080
+client --> auth : (debug) HTTP :8081
+
+gw --> auth : forward /api/auth/**
+auth --> pg : JDBC (auth_db)
+
+@enduml

@@ -1,0 +1,59 @@
+@startuml
+' Datacrowd - Microservices Architecture (high level)
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam wrapWidth 200
+
+actor User as user
+actor Admin as admin
+
+cloud "Internet" {
+  [Web UI / Mobile UI] as ui
+}
+
+node "Docker host" {
+  node "API Gateway\nSpring Cloud Gateway :8080" as gateway
+
+  node "Auth Service\nSpring Boot :8081" as auth
+
+  database "Postgres\n(datacrowd-postgres)" as pg
+
+  ' Planned nodes
+  node "Core Service (planned)\nSpring Boot" as core
+  node "Payments Service (planned)\nSpring Boot" as pay
+  node "Runner Service (planned)\nGo" as runner
+}
+
+cloud "External providers" {
+  [Stripe (planned)] as stripe
+  [Email provider (SMTP) (planned)] as smtp
+}
+
+user --> ui
+admin --> ui
+
+ui --> gateway : HTTPS API
+
+gateway --> auth : /api/auth/**\n→ /auth/**
+
+' planned routes
+gateway --> core : /api/core/**
+gateway --> pay  : /api/payments/**
+
+auth --> pg : auth_db\n(users, roles)
+core --> pg : core_db\n(events, clubs, tickets)
+pay  --> pg : payments_db\n(payments, invoices)
+
+pay --> stripe : create checkout\nwebhook events
+pay --> runner : send job\n(fulfillment)
+
+auth --> smtp : send verify/reset (planned)
+
+note right of gateway
+Gateway должен быть stateless:
+- CSRF отключить
+- session отключить
+- проксирование + маршрутизация
+end note
+
+@enduml

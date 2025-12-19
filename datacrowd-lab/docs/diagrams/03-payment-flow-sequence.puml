@@ -1,0 +1,26 @@
+@startuml
+title Payments - Checkout + Webhook (концепт)
+
+actor User
+participant "API Gateway" as GW
+participant "core-service" as CORE
+participant "payments-service" as PAY
+cloud "Stripe" as STRIPE
+database "payments_db" as PAYDB
+
+== Create checkout ==
+User -> GW : POST /api/pay/checkout\n{planId}
+GW -> PAY : POST /pay/checkout
+PAY -> STRIPE : create session
+STRIPE --> PAY : sessionUrl
+PAY -> PAYDB : INSERT payment(status=PENDING)
+PAY --> GW : 200 {sessionUrl}
+GW --> User : 200 {sessionUrl}
+
+== Webhook ==
+STRIPE -> PAY : POST /pay/webhook (event)
+PAY -> PAYDB : UPDATE payment(status=PAID)
+PAY -> CORE : POST /core/subscriptions/activate\n{userId,planId}
+CORE --> PAY : 200 OK
+
+@enduml

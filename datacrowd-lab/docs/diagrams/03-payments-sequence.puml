@@ -1,0 +1,29 @@
+@startuml
+title Datacrowd — Payments flow (checkout + webhook)
+
+actor Client
+participant "API Gateway" as GW
+participant "Core Service" as CORE
+participant "Payments Service" as PAY
+participant "Stripe" as STR
+
+database "Postgres (payments_db)" as PDB
+
+autonumber
+
+== Create Checkout ==
+Client -> GW : POST /api/payments/checkout\nAuthorization: Bearer JWT
+GW -> PAY : POST /payments/checkout
+PAY -> STR : create checkout session
+STR --> PAY : session (id,url)
+PAY -> PDB : INSERT payment(order_id,status=CREATED,session_id)
+PAY --> GW : 200 {checkoutUrl}
+GW --> Client : 200 {checkoutUrl}
+
+== Stripe webhook ==
+STR -> PAY : POST /payments/webhook\n(event: payment_succeeded)
+PAY -> STR : verify signature
+PAY -> PDB : UPDATE payment status=PAID
+PAY -> CORE : POST /internal/orders/{id}/paid
+CORE --> PAY : 200 OK
+@enduml

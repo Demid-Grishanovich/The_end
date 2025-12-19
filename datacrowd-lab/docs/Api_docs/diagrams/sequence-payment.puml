@@ -1,0 +1,34 @@
+@startuml
+title Stripe payment flow — Checkout + Webhook + Unlock access
+
+skinparam shadowing false
+skinparam linetype ortho
+
+actor "Client" as client
+participant "Frontend" as fe
+participant "Payments Service" as pay
+participant "Stripe" as stripe
+participant "Core Service" as core
+
+== Create checkout ==
+client -> fe : Click "Pay"
+fe -> pay : POST /payments/checkout\nAuthorization: Bearer JWT\n{projectId, type}
+pay -> pay : Create payment record\nstatus = PENDING
+pay -> stripe : Create Checkout Session\n(metadata: paymentId, projectId, userId)
+stripe --> pay : Checkout session info\n(checkoutUrl)
+pay --> fe : 200 OK\n{checkoutUrl}
+
+== User pays on Stripe ==
+fe -> stripe : Redirect to checkoutUrl
+client -> stripe : Enter payment details\nPay (test mode)
+
+== Stripe webhook ==
+stripe -> pay : POST /webhooks/stripe\n(signed event)
+pay -> pay : Verify signature\nUpdate payment status = PAID
+pay -> core : POST /internal/projects/{id}/billing\nX-Internal-Token\n(unlock quota/billing)
+core --> pay : 200 OK
+
+== Result ==
+pay --> stripe : 200 OK (webhook processed)
+
+@enduml

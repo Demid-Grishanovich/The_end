@@ -1,0 +1,26 @@
+@startuml
+title Auth - Register + Login (JWT)
+
+actor User
+participant "API Gateway" as GW
+participant "auth-service" as AUTH
+database "auth_db" as DB
+
+== Register ==
+User -> GW : POST /api/auth/register\n{username,email,password}
+GW -> AUTH : POST /auth/register
+AUTH -> DB : INSERT user (hash password)
+DB --> AUTH : ok
+AUTH --> GW : 200 {token,userId,role}
+GW --> User : 200 {token,userId,role}
+
+== Login (email) ==
+User -> GW : POST /api/auth/login\n{email,password}
+GW -> AUTH : POST /auth/login
+AUTH -> DB : SELECT user by email
+DB --> AUTH : user
+AUTH -> AUTH : verify password
+AUTH --> GW : 200 {token,userId,role}
+GW --> User : 200 {token,userId,role}
+
+@enduml

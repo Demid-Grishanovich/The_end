@@ -1,0 +1,56 @@
+@startuml
+title DataCrowd Lab — Architecture (High-level)
+
+skinparam shadowing false
+skinparam componentStyle rectangle
+skinparam linetype ortho
+skinparam packageStyle rectangle
+
+actor "User" as user
+
+package "Frontend" {
+  [React SPA] as fe
+}
+
+package "Backend (Microservices)" {
+  [API Gateway] as gw
+  [Auth Service] as auth
+  [Core Service] as core
+  [Payments Service] as pay
+  [Runner (Go)] as runner
+}
+
+database "auth_db (PostgreSQL)" as authdb
+database "core_db (PostgreSQL)" as coredb
+database "payments_db (PostgreSQL)" as paydb
+
+cloud "Stripe" as stripe
+
+' --- Public flow
+user --> fe : UI actions
+fe --> gw : HTTPS REST\n(JWT)
+
+gw --> auth : /auth/**
+gw --> core : /projects, /datasets, /tasks ...
+gw --> pay  : /payments/**
+
+' --- Databases
+auth --> authdb : JPA/Flyway
+core --> coredb : JPA/Flyway
+pay  --> paydb  : JPA/Flyway
+
+' --- Internal flow
+core <--> runner : Internal REST\n(X-Internal-Token)
+pay  --> stripe : Stripe API\n(create checkout session)
+stripe --> pay : Webhooks\n(signature verified)
+pay --> core : Internal REST\n(unlock quota/billing)\n(X-Internal-Token)
+
+note bottom of gw
+Public API: Authorization: Bearer <JWT>
+end note
+
+note bottom of core
+Internal API: X-Internal-Token required
+end note
+
+@enduml

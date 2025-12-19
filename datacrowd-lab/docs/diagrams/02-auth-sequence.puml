@@ -1,0 +1,30 @@
+@startuml
+title Datacrowd — Auth flow (register/login/JWT)
+
+actor Client
+participant "API Gateway" as GW
+participant "Auth Service" as AS
+database "Postgres (auth_db)" as DB
+
+== Register ==
+Client -> GW : POST /api/auth/register\n{username,email,password}
+GW -> AS : POST /auth/register
+AS -> DB : INSERT user (hash password)
+DB --> AS : user_id
+AS --> GW : 200 {token,userId,role}
+GW --> Client : 200 {token,userId,role}
+
+== Login ==
+Client -> GW : POST /api/auth/login\n{email,password}
+GW -> AS : POST /auth/login
+AS -> DB : SELECT user by email
+DB --> AS : user(+passwordHash)
+AS -> AS : verify password
+AS --> GW : 200 {token,userId,role}
+GW --> Client : 200 {token,userId,role}
+
+== Call protected endpoint (planned) ==
+Client -> GW : GET /api/core/...\nAuthorization: Bearer <JWT>
+GW -> core : GET /...\nAuthorization: Bearer <JWT>
+
+@enduml

@@ -1,0 +1,4 @@
+# Project exclude paths
+/datacrowd-lab/services/auth-service/target/
+/datacrowd-lab/services/core-service/target/
+/datacrowd-lab/services/payments-service/target/

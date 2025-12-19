@@ -1,0 +1,28 @@
+server:
+  port: ${AUTH_PORT:8081}
+
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/auth_db
+    username: auth_user
+    password: auth_pass
+  flyway:
+    user: auth_user
+    password: auth_pass
+    enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+
+JWT_SECRET: "this_is_a_very_long_secret_key_32bytes_minimum_please_change_it"
