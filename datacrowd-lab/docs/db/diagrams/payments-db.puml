@@ -1,0 +1,31 @@
+@startuml
+entity payments {
+  +id : UUID
+  --
+  user_id : UUID
+  project_id : UUID
+  amount_cents : int
+  currency : varchar
+  status : varchar
+  stripe_session_id : varchar
+  stripe_payment_intent_id : varchar
+  created_at : timestamptz
+}
+
+entity ledger {
+  +id : UUID
+  --
+  project_id : UUID
+  type : varchar
+  amount_cents : int
+  ref_payment_id : UUID
+  created_at : timestamptz
+}
+
+entity v_project_payments_summary <<VIEW>>
+entity v_project_ledger_balance <<VIEW>>
+
+payments ||--o{ ledger : ref_payment
+payments ||--o{ v_project_payments_summary
+ledger ||--o{ v_project_ledger_balance
+@enduml

@@ -1,0 +1,23 @@
+@startuml
+entity users {
+  +id : UUID
+  --
+  email : varchar <<UNIQUE>>
+  username : varchar <<UNIQUE>>
+  password_hash : varchar
+  role : varchar
+  status : varchar
+  created_at : timestamptz
+  updated_at : timestamptz
+}
+
+entity v_users_masked <<VIEW>> {
+  id
+  username
+  role
+  status
+  email_masked
+}
+
+users ||--o{ v_users_masked : masks
+@enduml

@@ -1,0 +1,42 @@
+@startuml
+entity projects {
+  +id : UUID
+  name : varchar
+  status : varchar
+  created_at : timestamptz
+}
+
+entity datasets {
+  +id : UUID
+  project_id : UUID
+  source_path : varchar
+  status : varchar
+  created_at : timestamptz
+}
+
+entity tasks {
+  +id : UUID
+  dataset_id : UUID
+  status : varchar
+  created_at : timestamptz
+}
+
+entity answers {
+  +id : UUID
+  task_id : UUID
+  value : text
+  created_at : timestamptz
+}
+
+entity reviews {
+  +id : UUID
+  answer_id : UUID
+  decision : varchar
+  created_at : timestamptz
+}
+
+projects ||--o{ datasets
+datasets ||--o{ tasks
+tasks ||--o{ answers
+answers ||--o{ reviews
+@enduml
