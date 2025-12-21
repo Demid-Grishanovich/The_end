@@ -64,3 +64,4 @@ CREATE TABLE IF NOT EXISTS points_ledger (
     reason varchar(255),
     created_at timestamptz NOT NULL DEFAULT now()
     );
+

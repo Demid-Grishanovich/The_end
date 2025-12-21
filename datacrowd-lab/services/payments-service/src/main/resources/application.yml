@@ -1,11 +1,13 @@
 server:
-  port: 8083
+  port: ${SERVER_PORT:8083}
 
 spring:
   datasource:
-    url: jdbc:postgresql://postgres:5432/payments_db
-    username: payments_user
-    password: payments_pass
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/payments_db}
+    username: ${SPRING_DATASOURCE_USERNAME:payments_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:payments_pass}
+  config:
+    import: optional:file:.env[.properties]
 
   jpa:
     open-in-view: false
@@ -21,3 +23,7 @@ management:
     web:
       exposure:
         include: health,info
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}

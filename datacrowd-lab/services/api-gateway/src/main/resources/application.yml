@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
 
 spring:
   application:
@@ -9,21 +9,21 @@ spring:
     gateway:
       routes:
         - id: auth-service
-          uri: http://localhost:8081
+          uri: ${AUTH_SERVICE_URL:http://localhost:8081}
           predicates:
             - Path=/api/auth/**
           filters:
             - RewritePath=/api/auth/(?<segment>.*), /auth/${segment}
 
         - id: core-service
-          uri: http://localhost:8082
+          uri: ${CORE_SERVICE_URL:http://localhost:8082}
           predicates:
             - Path=/api/core/**
           filters:
             - RewritePath=/api/core/(?<segment>.*), /core/${segment}
 
         - id: payments-service
-          uri: http://localhost:8083
+          uri: ${PAYMENTS_SERVICE_URL:http://localhost:8083}
           predicates:
             - Path=/api/payments/**
           filters:

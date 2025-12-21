@@ -1,6 +1,7 @@
 package com.datacrowd.core.config;
 
 import com.datacrowd.core.security.InternalTokenFilter;
+import com.datacrowd.core.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -16,46 +17,54 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, InternalTokenFilter internalTokenFilter) throws Exception {
+    public SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            InternalTokenFilter internalTokenFilter,
+            JwtAuthenticationFilter jwtAuthenticationFilter
+    ) throws Exception {
 
         http
-                // API-only режим
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-
-                // Отключаем дефолтные формы/бейсик, чтобы не было popup в Swagger
                 .httpBasic(Customizer.withDefaults())
                 .formLogin(form -> form.disable());
 
-        // Если хочешь полностью убрать Basic Auth:
-        // .httpBasic(basic -> basic.disable())
-
         http.authorizeHttpRequests(auth -> auth
-                // CORS preflight
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                // Swagger / OpenAPI (разрешаем всегда)
-                .requestMatchers(
-                        "/swagger-ui/**",
-                        "/v3/api-docs/**",
-                        "/swagger-ui.html"
-                ).permitAll()
+                // Swagger/OpenAPI
+                .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html").permitAll()
 
-                // Actuator health/info (чтобы docker/gateway могли чекать)
-                .requestMatchers(
-                        "/actuator/health/**",
-                        "/actuator/info"
-                ).permitAll()
+                // Health/info
+                .requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
 
-                // Наши internal endpoints защищает InternalTokenFilter
+                // public ping
+                .requestMatchers("/core/ping").permitAll()
+
+                // internal — доступ разрешаем, но фильтр отрежет без токена
                 .requestMatchers("/internal/**").permitAll()
 
-                // Всё остальное — пока разрешаем (позже прикрутим JWT через gateway)
-                .anyRequest().permitAll()
+                // RBAC demo (оставляем)
+                .requestMatchers("/core/security-demo/admin").hasRole("ADMIN")
+                .requestMatchers("/core/security-demo/client").hasRole("CLIENT")
+                .requestMatchers("/core/security-demo/worker").hasRole("WORKER")
+                .requestMatchers("/core/security-demo/me").authenticated()
+
+                // Projects/Datasets:
+                // создание — только CLIENT/ADMIN
+                .requestMatchers(HttpMethod.POST, "/core/projects/**").hasAnyRole("CLIENT", "ADMIN")
+
+                // чтение — любой авторизованный
+                .requestMatchers(HttpMethod.GET, "/core/projects/**").authenticated()
+
+                // всё остальное в /core/** — требует JWT
+                .requestMatchers("/core/**").authenticated()
+
+                .anyRequest().denyAll()
         );
 
-        // Internal token проверяем ДО стандартных фильтров
         http.addFilterBefore(internalTokenFilter, UsernamePasswordAuthenticationFilter.class);
+        http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
