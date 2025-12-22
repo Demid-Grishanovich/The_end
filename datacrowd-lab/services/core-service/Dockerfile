@@ -10,10 +10,15 @@ FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
 # curl нужен для healthcheck (compose)
-RUN apk add --no-cache curl && addgroup -S app && adduser -S appuser -G app
+RUN apk add --no-cache curl \
+    && addgroup -S app \
+    && adduser -S appuser -G app \
+    # Папка для хранения загруженных датасетов (монтируется volume в compose)
+    && mkdir -p /data \
+    && chown -R appuser:app /data
 
 COPY --from=builder /workspace/target/*.jar /app/app.jar
 
 USER appuser
-EXPOSE 8080
+EXPOSE 8082
 ENTRYPOINT ["java","-jar","/app/app.jar"]

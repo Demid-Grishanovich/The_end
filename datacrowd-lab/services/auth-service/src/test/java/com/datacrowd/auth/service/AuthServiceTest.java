@@ -1,150 +1,146 @@
 package com.datacrowd.auth.service;
 
+import com.datacrowd.auth.api.AuthDtos.AuthResponse;
+import com.datacrowd.auth.api.AuthDtos.LoginRequest;
+import com.datacrowd.auth.api.AuthDtos.RegisterRequest;
 import com.datacrowd.auth.jwt.JwtService;
 import com.datacrowd.auth.user.UserEntity;
 import com.datacrowd.auth.user.UserRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.ArgumentCaptor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Optional;
 import java.util.UUID;
 
-import static com.datacrowd.auth.api.AuthDtos.*;
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-@ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
 
-    @Mock
     private UserRepository users;
-
-    @Mock
     private PasswordEncoder passwordEncoder;
-
-    @Mock
     private JwtService jwtService;
 
-    @InjectMocks
     private AuthService authService;
 
-    @Test
-    void register_success() {
-        RegisterRequest req = new RegisterRequest("testuser", "test@mail.com", "123456");
+    @BeforeEach
+    void setUp() {
+        users = mock(UserRepository.class);
+        passwordEncoder = mock(PasswordEncoder.class);
+        jwtService = mock(JwtService.class);
 
-        when(users.findByUsername("testuser")).thenReturn(Optional.empty());
-        when(users.findByEmail("test@mail.com")).thenReturn(Optional.empty());
-        when(passwordEncoder.encode("123456")).thenReturn("hashed");
-
-        UserEntity saved = new UserEntity();
-        saved.setId(UUID.randomUUID());
-        saved.setUsername("testuser");
-        saved.setEmail("test@mail.com");
-        saved.setRole("WORKER");
-        saved.setPasswordHash("hashed");
-
-        when(users.save(any(UserEntity.class))).thenReturn(saved);
-        when(jwtService.generate(any(), any(), any())).thenReturn("token123");
-
-        AuthResponse resp = authService.register(req);
-
-        assertEquals("token123", resp.token());
-        assertNotNull(resp.userId());
-        assertEquals("WORKER", resp.role());
-
-        verify(users).save(any(UserEntity.class));
-        verify(jwtService).generate(any(), eq("test@mail.com"), eq("WORKER"));
+        authService = new AuthService(users, passwordEncoder, jwtService);
     }
 
     @Test
-    void register_fail_usernameTaken() {
-        RegisterRequest req = new RegisterRequest("testuser", "test@mail.com", "123456");
+    void register_shouldCreateUserAndReturnToken() {
+        var req = new RegisterRequest("demo", "demo@example.com", "pass");
 
-        when(users.findByUsername("testuser")).thenReturn(Optional.of(new UserEntity()));
+        when(users.findByUsername("demo")).thenReturn(Optional.empty());
+        when(users.findByEmail("demo@example.com")).thenReturn(Optional.empty());
+        when(passwordEncoder.encode("pass")).thenReturn("hashed");
 
-        IllegalArgumentException ex = assertThrows(
-                IllegalArgumentException.class,
-                () -> authService.register(req)
-        );
+        // emulate JPA prePersist behavior (id + status default)
+        when(users.save(any(UserEntity.class))).thenAnswer(inv -> {
+            UserEntity u = inv.getArgument(0);
+            if (u.getId() == null) u.setId(UUID.randomUUID());
+            if (u.getStatus() == null) u.setStatus(UserEntity.Status.ACTIVE);
+            return u;
+        });
 
-        assertEquals("username taken", ex.getMessage());
-        verify(users, never()).save(any());
+        when(jwtService.generate(anyString(), anyString(), anyString())).thenReturn("jwt-token");
+
+        AuthResponse res = authService.register(req);
+
+        assertThat(res.token()).isEqualTo("jwt-token");
+        assertThat(res.userId()).isNotBlank();
+        assertThat(res.role()).isEqualTo("WORKER");
+
+        ArgumentCaptor<UserEntity> captor = ArgumentCaptor.forClass(UserEntity.class);
+        verify(users).save(captor.capture());
+        UserEntity saved = captor.getValue();
+
+        assertThat(saved.getUsername()).isEqualTo("demo");
+        assertThat(saved.getEmail()).isEqualTo("demo@example.com");
+        assertThat(saved.getPasswordHash()).isEqualTo("hashed");
+        assertThat(saved.getRole()).isEqualTo("WORKER");
+        assertThat(saved.getStatus()).isEqualTo(UserEntity.Status.ACTIVE);
     }
 
     @Test
-    void register_fail_emailTaken() {
-        RegisterRequest req = new RegisterRequest("testuser", "test@mail.com", "123456");
+    void register_shouldFail_whenUsernameAlreadyExists() {
+        var req = new RegisterRequest("demo", "demo@example.com", "pass");
+        when(users.findByUsername("demo")).thenReturn(Optional.of(new UserEntity()));
 
-        when(users.findByUsername("testuser")).thenReturn(Optional.empty());
-        when(users.findByEmail("test@mail.com")).thenReturn(Optional.of(new UserEntity()));
-
-        IllegalArgumentException ex = assertThrows(
-                IllegalArgumentException.class,
-                () -> authService.register(req)
-        );
-
-        assertEquals("email taken", ex.getMessage());
-        verify(users, never()).save(any());
+        assertThatThrownBy(() -> authService.register(req))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("username");
     }
 
     @Test
-    void login_success() {
-        LoginRequest req = new LoginRequest("test@mail.com", "123456");
+    void register_shouldFail_whenEmailAlreadyExists() {
+        var req = new RegisterRequest("demo", "demo@example.com", "pass");
+        when(users.findByUsername("demo")).thenReturn(Optional.empty());
+        when(users.findByEmail("demo@example.com")).thenReturn(Optional.of(new UserEntity()));
 
-        UserEntity user = new UserEntity();
-        user.setId(UUID.randomUUID());
-        user.setEmail("test@mail.com");
-        user.setRole("WORKER");
-        user.setPasswordHash("hashed");
-
-        when(users.findByEmail("test@mail.com")).thenReturn(Optional.of(user));
-        when(passwordEncoder.matches("123456", "hashed")).thenReturn(true);
-        when(jwtService.generate(any(), any(), any())).thenReturn("token123");
-
-        AuthResponse resp = authService.login(req);
-
-        assertEquals("token123", resp.token());
-        assertEquals("WORKER", resp.role());
-        assertNotNull(resp.userId());
+        assertThatThrownBy(() -> authService.register(req))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("email");
     }
 
     @Test
-    void login_fail_badCredentials_whenNoUser() {
-        LoginRequest req = new LoginRequest("no@mail.com", "123");
+    void login_shouldReturnToken_whenCredentialsValid() {
+        UserEntity u = new UserEntity();
+        u.setId(UUID.randomUUID());
+        u.setEmail("demo@example.com");
+        u.setUsername("demo");
+        u.setPasswordHash("hashed");
+        u.setRole("WORKER");
+        u.setStatus(UserEntity.Status.ACTIVE);
 
-        when(users.findByEmail("no@mail.com")).thenReturn(Optional.empty());
+        when(users.findByEmail("demo@example.com")).thenReturn(Optional.of(u));
+        when(passwordEncoder.matches("pass", "hashed")).thenReturn(true);
+        when(jwtService.generate(anyString(), anyString(), anyString())).thenReturn("jwt-token");
 
-        IllegalArgumentException ex = assertThrows(
-                IllegalArgumentException.class,
-                () -> authService.login(req)
-        );
+        var req = new LoginRequest("demo@example.com", "pass");
+        AuthResponse res = authService.login(req);
 
-        assertEquals("bad credentials", ex.getMessage());
+        assertThat(res.token()).isEqualTo("jwt-token");
+        assertThat(res.userId()).isEqualTo(u.getId().toString());
+        assertThat(res.role()).isEqualTo("WORKER");
     }
 
     @Test
-    void login_fail_badCredentials_whenPasswordMismatch() {
-        LoginRequest req = new LoginRequest("test@mail.com", "wrong");
+    void login_shouldFail_whenUserNotFound() {
+        when(users.findByEmail("demo@example.com")).thenReturn(Optional.empty());
 
-        UserEntity user = new UserEntity();
-        user.setId(UUID.randomUUID());
-        user.setEmail("test@mail.com");
-        user.setRole("WORKER");
-        user.setPasswordHash("hashed");
+        var req = new LoginRequest("demo@example.com", "pass");
 
-        when(users.findByEmail("test@mail.com")).thenReturn(Optional.of(user));
-        when(passwordEncoder.matches("wrong", "hashed")).thenReturn(false);
+        assertThatThrownBy(() -> authService.login(req))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("bad credentials");
+    }
 
-        IllegalArgumentException ex = assertThrows(
-                IllegalArgumentException.class,
-                () -> authService.login(req)
-        );
+    @Test
+    void login_shouldFail_whenPasswordInvalid() {
+        UserEntity u = new UserEntity();
+        u.setId(UUID.randomUUID());
+        u.setEmail("demo@example.com");
+        u.setUsername("demo");
+        u.setPasswordHash("hashed");
+        u.setRole("WORKER");
+        u.setStatus(UserEntity.Status.ACTIVE);
 
-        assertEquals("bad credentials", ex.getMessage());
+        when(users.findByEmail("demo@example.com")).thenReturn(Optional.of(u));
+        when(passwordEncoder.matches("pass", "hashed")).thenReturn(false);
+
+        var req = new LoginRequest("demo@example.com", "pass");
+
+        assertThatThrownBy(() -> authService.login(req))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("bad credentials");
     }
 }

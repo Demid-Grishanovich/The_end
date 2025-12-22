@@ -3,6 +3,9 @@ package com.datacrowd.auth.api;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 
+
+import java.util.UUID;
+
 public class AuthDtos {
 
     public record RegisterRequest(

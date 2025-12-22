@@ -15,7 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 @Testcontainers
 @SpringBootTest
-class AuthFlywayIT {
+class AuthRepositoryIT {
 
     @Container
     static PostgreSQLContainer<?> postgres =

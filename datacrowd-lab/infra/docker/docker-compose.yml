@@ -90,6 +90,9 @@ services:
       - datacrowd-net
     env_file:
       - .env
+    volumes:
+      # storage for uploaded dataset files
+      - core_data:/data
 
   payments-service:
     build:
@@ -153,4 +156,5 @@ networks:
     driver: bridge
 
 volumes:
+  core_data:
   datacrowd_pgdata:
