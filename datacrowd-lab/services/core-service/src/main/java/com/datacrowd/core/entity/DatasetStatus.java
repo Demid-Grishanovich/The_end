@@ -1,2 +1,8 @@
 package com.datacrowd.core.entity;
-public enum DatasetStatus { NEW, UPLOADED, GENERATING, READY, FAILED }
+
+public enum DatasetStatus {
+    UPLOADED,
+    GENERATING,
+    READY,
+    FAILED
+}

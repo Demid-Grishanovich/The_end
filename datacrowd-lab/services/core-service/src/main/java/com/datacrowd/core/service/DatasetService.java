@@ -1,112 +1,110 @@
 package com.datacrowd.core.service;
 
-import com.datacrowd.core.dto.DatasetResponse;
+import com.datacrowd.core.dto.GenerateTasksRequest;
 import com.datacrowd.core.entity.DatasetEntity;
 import com.datacrowd.core.entity.DatasetStatus;
 import com.datacrowd.core.entity.ProjectEntity;
 import com.datacrowd.core.repo.DatasetRepository;
-import org.springframework.beans.factory.annotation.Value;
+import com.datacrowd.core.repo.ProjectRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
-import java.nio.file.*;
-import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
 public class DatasetService {
 
     private final DatasetRepository datasetRepository;
-    private final ProjectService projectService;
-
-    private final Path dataDir;
+    private final ProjectRepository projectRepository;
+    private final StorageService storageService;
+    private final RunnerClient runnerClient;
 
     public DatasetService(
             DatasetRepository datasetRepository,
-            ProjectService projectService,
-            @Value("${app.data.dir:/data}") String dataDir
+            ProjectRepository projectRepository,
+            StorageService storageService,
+            RunnerClient runnerClient
     ) {
         this.datasetRepository = datasetRepository;
-        this.projectService = projectService;
-        this.dataDir = Paths.get(dataDir);
+        this.projectRepository = projectRepository;
+        this.storageService = storageService;
+        this.runnerClient = runnerClient;
     }
 
     @Transactional
-    public DatasetResponse createWithUpload(UUID projectId, String name, String description, MultipartFile file) {
-        ProjectEntity project = projectService.requireOwnedProject(projectId);
+    public DatasetEntity upload(UUID projectId, UUID ownerUserId, MultipartFile file) {
+        ProjectEntity p = projectRepository.findById(projectId)
+                .orElseThrow(() -> new IllegalArgumentException("Project not found"));
 
-        if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("file is required");
+        if (!p.getOwnerUserId().equals(ownerUserId)) {
+            throw new IllegalStateException("Forbidden: not project owner");
         }
 
         DatasetEntity d = new DatasetEntity();
-        d.setProject(project);
-        d.setName(name);
-        d.setDescription(description);
-        d.setStatus(DatasetStatus.NEW);
+        d.setProjectId(projectId);
+        d.setStatus(DatasetStatus.UPLOADED);
 
-        DatasetEntity saved = datasetRepository.save(d);
-
-        // сохраняем файл в /data/datasets/<datasetId>/source.<ext>
-        String ext = guessExt(file.getOriginalFilename());
-        Path datasetFolder = dataDir.resolve("datasets").resolve(saved.getId().toString());
-        Path target = datasetFolder.resolve("source" + ext);
-
-        try {
-            Files.createDirectories(datasetFolder);
-            Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to save dataset file: " + e.getMessage(), e);
+        // IMPORTANT: in DB migration V1 datasets.name is NOT NULL.
+        // We fill it from filename to avoid insert errors.
+        String fileName = (file != null ? file.getOriginalFilename() : null);
+        if (fileName == null || fileName.isBlank()) {
+            fileName = "dataset";
         }
+        d.setName(fileName);
+        d.setTotalItems(0);
 
-        saved.setSourcePath(target.toString());
-        saved.setStatus(DatasetStatus.UPLOADED);
+        d = datasetRepository.save(d);
 
-        DatasetEntity updated = datasetRepository.save(saved);
-        return toResponse(updated);
+        String sourcePath = storageService.saveDatasetSource(d.getId(), file);
+        d.setSourcePath(sourcePath);
+
+        return datasetRepository.save(d);
     }
 
-    @Transactional(readOnly = true)
-    public List<DatasetResponse> list(UUID projectId) {
-        // ownership check by loading project
-        projectService.requireOwnedProject(projectId);
-        return datasetRepository.findAllByProjectId(projectId).stream().map(this::toResponse).toList();
-    }
-
-    @Transactional(readOnly = true)
-    public DatasetEntity requireOwnedDataset(UUID projectId, UUID datasetId) {
-        ProjectEntity project = projectService.requireOwnedProject(projectId);
-
+    @Transactional
+    public void generateTasks(UUID datasetId, UUID ownerUserId, GenerateTasksRequest req) {
         DatasetEntity d = datasetRepository.findById(datasetId)
-                .orElseThrow(() -> new IllegalArgumentException("Dataset not found: " + datasetId));
+                .orElseThrow(() -> new IllegalArgumentException("Dataset not found"));
 
-        if (!d.getProject().getId().equals(project.getId())) {
-            throw new IllegalStateException("Dataset does not belong to project");
+        ProjectEntity p = projectRepository.findById(d.getProjectId())
+                .orElseThrow(() -> new IllegalArgumentException("Project not found"));
+
+        if (!p.getOwnerUserId().equals(ownerUserId)) {
+            throw new IllegalStateException("Forbidden: not project owner");
         }
-        return d;
+
+        // Проверка оплаты/квоты (MVP согласно плану)
+        boolean paid = "PAID".equalsIgnoreCase(String.valueOf(p.getBillingStatus()));
+        boolean hasQuota = p.getTaskQuota() != null && p.getTaskQuota() > 0;
+        if (!paid && !hasQuota) {
+            throw new IllegalStateException("Project is not paid and has no task quota");
+        }
+
+        if (d.getSourcePath() == null || d.getSourcePath().isBlank()) {
+            throw new IllegalStateException("Dataset sourcePath is empty");
+        }
+
+        d.setStatus(DatasetStatus.GENERATING);
+        datasetRepository.save(d);
+
+        Map<String, Object> body = Map.of(
+                "datasetId", datasetId.toString(),
+                "sourcePath", d.getSourcePath(),
+                "batchSize", req.batchSize,
+                "reviewersCount", req.reviewersCount,
+                "rewardPoints", req.rewardPoints
+        );
+
+        runnerClient.triggerGenerate(datasetId, body);
     }
 
-    public DatasetResponse toResponse(DatasetEntity d) {
-        DatasetResponse r = new DatasetResponse();
-        r.id = d.getId();
-        r.projectId = d.getProject().getId();
-        r.name = d.getName();
-        r.description = d.getDescription();
-        r.sourcePath = d.getSourcePath();
-        r.status = d.getStatus();
-        r.totalItems = d.getTotalItems();
-        r.createdAt = d.getCreatedAt();
-        return r;
-    }
-
-    private static String guessExt(String originalName) {
-        if (originalName == null) return "";
-        int idx = originalName.lastIndexOf('.');
-        if (idx < 0) return "";
-        String ext = originalName.substring(idx).trim().toLowerCase();
-        if (ext.length() > 10) return "";
-        return ext;
+    @Transactional
+    public void updateDatasetStatusInternal(UUID datasetId, DatasetStatus status) {
+        DatasetEntity d = datasetRepository.findById(datasetId)
+                .orElseThrow(() -> new IllegalArgumentException("Dataset not found"));
+        d.setStatus(status);
+        datasetRepository.save(d);
     }
 }

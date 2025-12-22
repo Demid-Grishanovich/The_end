@@ -1,7 +1,7 @@
 package com.datacrowd.core.entity;
 
 import jakarta.persistence.*;
-import java.time.OffsetDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
@@ -9,27 +9,36 @@ import java.util.UUID;
 public class TaskBatchEntity {
 
     @Id
-    @GeneratedValue
+    @Column(columnDefinition = "uuid")
     private UUID id;
 
-    @ManyToOne(optional = false, fetch = FetchType.LAZY)
-    @JoinColumn(name = "dataset_id", nullable = false)
-    private DatasetEntity dataset;
+    @Column(name = "dataset_id", nullable = false, columnDefinition = "uuid")
+    private UUID datasetId;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 50)
+    @Column(name = "status", nullable = false, length = 30)
     private BatchStatus status = BatchStatus.NEW;
 
-    @Column(name = "claimed_by_user_id")
+    @Column(name = "claimed_by_user_id", columnDefinition = "uuid")
     private UUID claimedByUserId;
 
-    @Column(name = "created_at", insertable = false, updatable = false)
-    private OffsetDateTime createdAt;
+    @Column(name = "created_at")
+    private Instant createdAt;
+
+    @PrePersist
+    void prePersist() {
+        if (id == null) id = UUID.randomUUID();
+        createdAt = Instant.now();
+        if (status == null) status = BatchStatus.NEW;
+    }
+
+    // getters/setters
 
     public UUID getId() { return id; }
+    public void setId(UUID id) { this.id = id; }
 
-    public DatasetEntity getDataset() { return dataset; }
-    public void setDataset(DatasetEntity dataset) { this.dataset = dataset; }
+    public UUID getDatasetId() { return datasetId; }
+    public void setDatasetId(UUID datasetId) { this.datasetId = datasetId; }
 
     public BatchStatus getStatus() { return status; }
     public void setStatus(BatchStatus status) { this.status = status; }
@@ -37,5 +46,6 @@ public class TaskBatchEntity {
     public UUID getClaimedByUserId() { return claimedByUserId; }
     public void setClaimedByUserId(UUID claimedByUserId) { this.claimedByUserId = claimedByUserId; }
 
-    public OffsetDateTime getCreatedAt() { return createdAt; }
+    public Instant getCreatedAt() { return createdAt; }
+    public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
 }

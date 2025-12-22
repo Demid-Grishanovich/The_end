@@ -1,7 +1,10 @@
 package com.datacrowd.core.entity;
 
 import jakarta.persistence.*;
-import java.time.OffsetDateTime;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
@@ -12,71 +15,64 @@ public class ProjectEntity {
     @GeneratedValue
     private UUID id;
 
-    @Column(name = "owner_user_id")
+    @Column(nullable = false)
     private UUID ownerUserId;
 
-    @Column(nullable = false, length = 255)
-    private String title;
+    @Column(nullable = false)
+    private String name;
 
     @Column(columnDefinition = "text")
     private String description;
 
-    @Column(name = "reward_points", nullable = false)
-    private int rewardPoints;
+    private String dataType;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 50)
-    private ProjectStatus status = ProjectStatus.DRAFT;
+    @Column(nullable = false)
+    private ProjectStatus status = ProjectStatus.NEW;
 
-    @Column(name = "reviewers_count", nullable = false)
-    private int reviewersCount = 1;
+    private Integer reviewersCount;
+    private Integer rewardPoints;
 
-    @Column(name = "data_type", nullable = false, length = 50)
-    private String dataType = "GENERIC";
+    // MVP billing/quota
+    private String billingStatus; // "PAID"/"UNPAID"
+    private Integer taskQuota = 0;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "billing_status", nullable = false, length = 50)
-    private BillingStatus billingStatus = BillingStatus.UNPAID;
+    @CreationTimestamp
+    private Instant createdAt;
 
-    @Column(name = "task_quota", nullable = false)
-    private int taskQuota = 0;
+    @UpdateTimestamp
+    private Instant updatedAt;
 
-    @Column(name = "created_at", insertable = false, updatable = false)
-    private OffsetDateTime createdAt;
-
-    @Column(name = "updated_at", insertable = false, updatable = false)
-    private OffsetDateTime updatedAt;
-
-    // getters/setters
     public UUID getId() { return id; }
+    public void setId(UUID id) { this.id = id; }
 
     public UUID getOwnerUserId() { return ownerUserId; }
     public void setOwnerUserId(UUID ownerUserId) { this.ownerUserId = ownerUserId; }
 
-    public String getTitle() { return title; }
-    public void setTitle(String title) { this.title = title; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
 
-    public int getRewardPoints() { return rewardPoints; }
-    public void setRewardPoints(int rewardPoints) { this.rewardPoints = rewardPoints; }
+    public String getDataType() { return dataType; }
+    public void setDataType(String dataType) { this.dataType = dataType; }
 
     public ProjectStatus getStatus() { return status; }
     public void setStatus(ProjectStatus status) { this.status = status; }
 
-    public int getReviewersCount() { return reviewersCount; }
-    public void setReviewersCount(int reviewersCount) { this.reviewersCount = reviewersCount; }
+    public Integer getReviewersCount() { return reviewersCount; }
+    public void setReviewersCount(Integer reviewersCount) { this.reviewersCount = reviewersCount; }
 
-    public String getDataType() { return dataType; }
-    public void setDataType(String dataType) { this.dataType = dataType; }
+    public Integer getRewardPoints() { return rewardPoints; }
+    public void setRewardPoints(Integer rewardPoints) { this.rewardPoints = rewardPoints; }
 
-    public BillingStatus getBillingStatus() { return billingStatus; }
-    public void setBillingStatus(BillingStatus billingStatus) { this.billingStatus = billingStatus; }
+    public String getBillingStatus() { return billingStatus; }
+    public void setBillingStatus(String billingStatus) { this.billingStatus = billingStatus; }
 
-    public int getTaskQuota() { return taskQuota; }
-    public void setTaskQuota(int taskQuota) { this.taskQuota = taskQuota; }
+    public Integer getTaskQuota() { return taskQuota; }
+    public void setTaskQuota(Integer taskQuota) { this.taskQuota = taskQuota; }
 
-    public OffsetDateTime getCreatedAt() { return createdAt; }
-    public OffsetDateTime getUpdatedAt() { return updatedAt; }
+    public Instant getCreatedAt() { return createdAt; }
+    public Instant getUpdatedAt() { return updatedAt; }
 }

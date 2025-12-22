@@ -1,47 +1,35 @@
 package com.datacrowd.core.dto;
 
-import jakarta.validation.constraints.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 public class CreateProjectRequest {
 
     @NotBlank
-    @Size(max = 255)
-    private String title;
+    @Size(max = 200)
+    private String name;
 
+    @Size(max = 2000)
     private String description;
 
-    @Min(0)
-    @Max(1000000)
-    private int rewardPoints = 0;
-
-    @Min(1)
-    @Max(10)
-    private int reviewersCount = 1;
-
-    @NotBlank
     @Size(max = 50)
-    private String dataType = "GENERIC";
+    private String dataType;
 
-    @Min(0)
-    @Max(1000000)
-    private int taskQuota = 0;
+    private Integer reviewersCount;
+    private Integer rewardPoints;
 
-    // getters/setters
-    public String getTitle() { return title; }
-    public void setTitle(String title) { this.title = title; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
 
-    public int getRewardPoints() { return rewardPoints; }
-    public void setRewardPoints(int rewardPoints) { this.rewardPoints = rewardPoints; }
-
-    public int getReviewersCount() { return reviewersCount; }
-    public void setReviewersCount(int reviewersCount) { this.reviewersCount = reviewersCount; }
-
     public String getDataType() { return dataType; }
     public void setDataType(String dataType) { this.dataType = dataType; }
 
-    public int getTaskQuota() { return taskQuota; }
-    public void setTaskQuota(int taskQuota) { this.taskQuota = taskQuota; }
+    public Integer getReviewersCount() { return reviewersCount; }
+    public void setReviewersCount(Integer reviewersCount) { this.reviewersCount = reviewersCount; }
+
+    public Integer getRewardPoints() { return rewardPoints; }
+    public void setRewardPoints(Integer rewardPoints) { this.rewardPoints = rewardPoints; }
 }

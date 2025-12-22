@@ -28,9 +28,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
-        if (path == null) return true;
-
-        return path.startsWith("/swagger-ui")
+        return path.startsWith("/swagger-ui/")
                 || path.startsWith("/v3/api-docs")
                 || path.equals("/swagger-ui.html")
                 || path.startsWith("/actuator")
@@ -57,17 +55,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             Claims claims = jwtService.parseAndValidate(token);
 
             String username = claims.getSubject();
-            String userId = String.valueOf(claims.get("userId"));
+            String userId = String.valueOf(claims.get("userId")); // ВАЖНО: userId (как в твоих скринах)
             String role = String.valueOf(claims.get("role"));
 
             JwtPrincipal principal = new JwtPrincipal(userId, username, role);
 
             var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
-
             var authentication = new UsernamePasswordAuthenticationToken(principal, null, authorities);
             SecurityContextHolder.getContext().setAuthentication(authentication);
 
             filterChain.doFilter(request, response);
+
         } catch (JwtException ex) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);

@@ -1,2 +1,8 @@
 package com.datacrowd.core.entity;
-public enum ProjectStatus { DRAFT, ACTIVE, ARCHIVED }
+
+public enum ProjectStatus {
+    DRAFT,
+    NEW,
+    ACTIVE,
+    ARCHIVED
+}

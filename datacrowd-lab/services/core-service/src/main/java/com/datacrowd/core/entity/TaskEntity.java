@@ -2,9 +2,8 @@ package com.datacrowd.core.entity;
 
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
 
-import java.time.OffsetDateTime;
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
@@ -15,57 +14,76 @@ public class TaskEntity {
     @GeneratedValue
     private UUID id;
 
-    @ManyToOne(optional = false, fetch = FetchType.LAZY)
-    @JoinColumn(name = "project_id", nullable = false)
+    // В БД: project_id uuid
+    @Column(name = "project_id", columnDefinition = "uuid")
+    private UUID projectId;
+
+    // В БД: dataset_id uuid
+    @Column(name = "dataset_id", columnDefinition = "uuid")
+    private UUID datasetId;
+
+    // связи (не обязательны, но удобно)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "project_id", referencedColumnName = "id", insertable = false, updatable = false)
     private ProjectEntity project;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "dataset_id")
+    @JoinColumn(name = "dataset_id", referencedColumnName = "id", insertable = false, updatable = false)
     private DatasetEntity dataset;
 
-    @Column(nullable = false, length = 255)
+    // ✅ В БД: batch_id uuid REFERENCES task_batches(id)
+    @Column(name = "batch_id", columnDefinition = "uuid")
+    private UUID batchId;
+
+    // (опционально) связь на батч
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "batch_id", referencedColumnName = "id", insertable = false, updatable = false)
+    private TaskBatchEntity batch;
+
     private String title;
 
     @Column(columnDefinition = "text")
     private String description;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 50)
-    private TaskStatus status = TaskStatus.OPEN;
-
-    @Column(name = "assigned_user_id")
-    private UUID assignedUserId;
-
-    @CreationTimestamp
-    @Column(name = "created_at", nullable = false)
-    private OffsetDateTime createdAt;
-
-    @UpdateTimestamp
-    @Column(name = "updated_at", nullable = false)
-    private OffsetDateTime updatedAt;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "batch_id")
-    private TaskBatchEntity batch;
+    @Column(nullable = false)
+    private TaskStatus status = TaskStatus.NEW;
 
     @Column(name = "payload_json", columnDefinition = "text")
     private String payloadJson;
 
-    @Column(name = "locked_by_user_id")
-    private UUID lockedByUserId;
-
-    @Column(name = "locked_at")
-    private OffsetDateTime lockedAt;
-
-    // getters/setters
+    @CreationTimestamp
+    private Instant createdAt;
 
     public UUID getId() { return id; }
+    public void setId(UUID id) { this.id = id; }
+
+    public UUID getProjectId() { return projectId; }
+    public void setProjectId(UUID projectId) { this.projectId = projectId; }
+
+    public UUID getDatasetId() { return datasetId; }
+    public void setDatasetId(UUID datasetId) { this.datasetId = datasetId; }
 
     public ProjectEntity getProject() { return project; }
-    public void setProject(ProjectEntity project) { this.project = project; }
+    public void setProject(ProjectEntity project) {
+        this.project = project;
+        this.projectId = (project == null ? null : project.getId());
+    }
 
     public DatasetEntity getDataset() { return dataset; }
-    public void setDataset(DatasetEntity dataset) { this.dataset = dataset; }
+    public void setDataset(DatasetEntity dataset) {
+        this.dataset = dataset;
+        this.datasetId = (dataset == null ? null : dataset.getId());
+    }
+
+    public UUID getBatchId() { return batchId; }
+    public void setBatchId(UUID batchId) { this.batchId = batchId; }
+
+    public TaskBatchEntity getBatch() { return batch; }
+    public void setBatch(TaskBatchEntity batch) {
+        this.batch = batch;
+        this.batchId = (batch == null ? null : batch.getId());
+    }
 
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }
@@ -76,41 +94,8 @@ public class TaskEntity {
     public TaskStatus getStatus() { return status; }
     public void setStatus(TaskStatus status) { this.status = status; }
 
-    public UUID getAssignedUserId() { return assignedUserId; }
-    public void setAssignedUserId(UUID assignedUserId) { this.assignedUserId = assignedUserId; }
+    public String getPayloadJson() { return payloadJson; }
+    public void setPayloadJson(String payloadJson) { this.payloadJson = payloadJson; }
 
-    public OffsetDateTime getCreatedAt() { return createdAt; }
-    public OffsetDateTime getUpdatedAt() { return updatedAt; }
-
-    public UUID getLockedByUserId() {
-        return lockedByUserId;
-    }
-
-    public void setLockedByUserId(UUID lockedByUserId) {
-        this.lockedByUserId = lockedByUserId;
-    }
-
-    public OffsetDateTime getLockedAt() {
-        return lockedAt;
-    }
-
-    public void setLockedAt(OffsetDateTime lockedAt) {
-        this.lockedAt = lockedAt;
-    }
-
-    public String getPayloadJson() {
-        return payloadJson;
-    }
-
-    public void setPayloadJson(String payloadJson) {
-        this.payloadJson = payloadJson;
-    }
-
-    public TaskBatchEntity getBatch() {
-        return batch;
-    }
-
-    public void setBatch(TaskBatchEntity batch) {
-        this.batch = batch;
-    }
+    public Instant getCreatedAt() { return createdAt; }
 }

@@ -1,4 +1,4 @@
-package com.datacrowd.core.api;
+package com.datacrowd.core.api.internal;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
