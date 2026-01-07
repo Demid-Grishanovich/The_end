@@ -15,6 +15,9 @@ public class TaskBatchEntity {
     @Column(name = "dataset_id", nullable = false, columnDefinition = "uuid")
     private UUID datasetId;
 
+    @Column(name = "total_tasks", nullable = false)
+    private int totalTasks = 0;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 30)
     private BatchStatus status = BatchStatus.NEW;
@@ -39,6 +42,9 @@ public class TaskBatchEntity {
 
     public UUID getDatasetId() { return datasetId; }
     public void setDatasetId(UUID datasetId) { this.datasetId = datasetId; }
+
+    public int getTotalTasks() { return totalTasks; }
+    public void setTotalTasks(int totalTasks) { this.totalTasks = totalTasks; }
 
     public BatchStatus getStatus() { return status; }
     public void setStatus(BatchStatus status) { this.status = status; }

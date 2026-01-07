@@ -107,4 +107,13 @@ public class DatasetService {
         d.setStatus(status);
         datasetRepository.save(d);
     }
+
+    @Transactional
+    public void updateDatasetTotalItemsInternal(UUID datasetId, int totalItems) {
+        DatasetEntity d = datasetRepository.findById(datasetId)
+                .orElseThrow(() -> new IllegalArgumentException("Dataset not found"));
+        if (totalItems < 0) totalItems = 0;
+        d.setTotalItems(totalItems);
+        datasetRepository.save(d);
+    }
 }

@@ -25,4 +25,13 @@ public class InternalDatasetsController {
         datasetService.updateDatasetStatusInternal(datasetId, DatasetStatus.valueOf(status));
         return "ok";
     }
+
+    @PatchMapping("/{datasetId}/total-items")
+    public String updateTotalItems(
+            @PathVariable UUID datasetId,
+            @RequestParam int value
+    ) {
+        datasetService.updateDatasetTotalItemsInternal(datasetId, value);
+        return "ok";
+    }
 }
