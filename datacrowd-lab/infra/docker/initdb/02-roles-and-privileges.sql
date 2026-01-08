@@ -1,3 +1,8 @@
+-- NOTE (diploma simplification):
+-- DB usernames are fixed constants for deterministic init:
+-- auth_user, core_user, payments_user.
+-- If you change DB users in env, you must also update this file accordingly.
+
 -- Safe for repeated runs: wrap each CREATE ROLE in a try/catch block
 DO $do$
 BEGIN

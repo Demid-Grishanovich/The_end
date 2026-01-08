@@ -49,8 +49,16 @@ public class TaskEntity {
     @Column(nullable = false)
     private TaskStatus status = TaskStatus.NEW;
 
-    @Column(name = "payload_json", columnDefinition = "text")
+
+    @Column(name = "payload_json", columnDefinition = "jsonb")
     private String payloadJson;
+
+    @Column(name = "locked_by_user_id")
+    private UUID lockedByUserId;
+
+    @Column(name = "locked_at")
+    private Instant lockedAt;
+
 
     @CreationTimestamp
     private Instant createdAt;
@@ -98,4 +106,27 @@ public class TaskEntity {
     public void setPayloadJson(String payloadJson) { this.payloadJson = payloadJson; }
 
     public Instant getCreatedAt() { return createdAt; }
+
+
+
+    public String getPayload() {
+        return payloadJson;
+    }
+
+    public UUID getLockedByUserId() {
+        return lockedByUserId;
+    }
+
+    public Instant getLockedAt() {
+        return lockedAt;
+    }
+
+    public void setLockedByUserId(UUID userId) {
+        this.lockedByUserId = userId;
+    }
+
+    public void setLockedAt(Instant lockedAt) {
+        this.lockedAt = lockedAt;
+    }
 }
+

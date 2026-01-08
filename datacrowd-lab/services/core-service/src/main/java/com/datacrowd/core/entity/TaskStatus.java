@@ -6,5 +6,10 @@ public enum TaskStatus {
     OPEN,
     IN_PROGRESS,
     DONE,
-    FAILED
+    FAILED,
+    LOCKED,
+    SUBMITTED,
+    IN_REVIEW,
+    APPROVED,
+    REJECTED
 }

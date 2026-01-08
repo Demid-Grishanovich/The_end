@@ -6,6 +6,10 @@ import org.springframework.security.config.annotation.web.reactive.EnableWebFlux
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 
+// NOTE (diploma simplification):
+// Gateway does not enforce auth; services validate JWT themselves.
+// This keeps gateway simple and focuses security on business services.
+
 @Configuration
 @EnableWebFluxSecurity
 public class SecurityConfig {

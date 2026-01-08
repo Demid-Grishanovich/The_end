@@ -27,3 +27,20 @@ management:
 app:
   jwt:
     secret: ${JWT_SECRET}
+
+  security:
+    internal-token: ${INTERNAL_TOKEN:}
+
+  core:
+    internal-base-url: ${CORE_INTERNAL_BASE_URL:http://localhost:8082}
+
+  stripe:
+    enabled: ${STRIPE_ENABLED:false}
+    secret-key: ${STRIPE_SECRET_KEY:}
+    webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+
+  payments:
+    default-amount-cents: ${PAYMENTS_AMOUNT_CENTS:500}
+    default-task-quota: ${PAYMENTS_TASK_QUOTA:100}
+    success-url: ${PAYMENTS_SUCCESS_URL:http://localhost:8080/api/payments/checkout/success}
+    cancel-url: ${PAYMENTS_CANCEL_URL:http://localhost:8080/api/payments/checkout/cancel}

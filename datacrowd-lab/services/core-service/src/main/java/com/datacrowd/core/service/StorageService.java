@@ -4,6 +4,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
+import java.nio.charset.StandardCharsets;
+import java.io.OutputStream;
 
 import java.io.InputStream;
 import java.nio.file.*;
@@ -43,4 +45,28 @@ public class StorageService {
             throw new IllegalStateException("Failed to store dataset file: " + e.getMessage(), e);
         }
     }
+
+
+    public Path ensureExportFile(UUID projectId, UUID datasetId, String filename) {
+        try {
+            Files.createDirectories(dataDir);
+            Path exportDir = dataDir.resolve("exports")
+                    .resolve(projectId.toString())
+                    .resolve(datasetId.toString());
+            Files.createDirectories(exportDir);
+
+            return exportDir.resolve(filename).normalize();
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to prepare export directory: " + e.getMessage(), e);
+        }
+    }
+
+    public byte[] readBytes(String absolutePath) {
+        try {
+            return Files.readAllBytes(Paths.get(absolutePath));
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to read file: " + e.getMessage(), e);
+        }
+    }
+
 }

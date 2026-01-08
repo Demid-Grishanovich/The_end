@@ -6,6 +6,7 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
@@ -16,6 +17,9 @@ import java.util.Map;
 @Service
 public class JwtService {
     private final SecretKey key;
+
+    @Value("${app.jwt.ttl-minutes:60}")
+    private long ttlMinutes;
 
     // Важно: секрет должен быть минимум 32 байта для HS256
     public JwtService(@Value("${app.jwt.secret}") String secret) {
@@ -35,7 +39,7 @@ public class JwtService {
                 .subject(subject)
                 .claims(Map.of("userId", userId, "role", role))
                 .issuedAt(Date.from(now))
-                .expiration(Date.from(now.plusSeconds(60 * 60 * 24))) // 24h (поменяешь позже на 15m)
+                .expiration(Date.from(now.plusSeconds(ttlMinutes * 60))) // 24h (поменяешь позже на 15m)
                 .signWith(key)
                 .compact();
     }
@@ -49,4 +53,6 @@ public class JwtService {
                 .parseSignedClaims(token)
                 .getPayload();
     }
+
+
 }

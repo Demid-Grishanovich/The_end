@@ -29,6 +29,6 @@ management:
 app:
   jwt:
     secret: ${JWT_SECRET:}
+    ttl-minutes: ${JWT_TTL_MINUTES:60}
 
 
-JWT_TTL_MINUTES: ${JWT_TTL_MINUTES:60}
