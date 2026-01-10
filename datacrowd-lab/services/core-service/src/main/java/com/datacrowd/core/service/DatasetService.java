@@ -3,6 +3,7 @@ package com.datacrowd.core.service;
 import com.datacrowd.core.dto.GenerateTasksRequest;
 import com.datacrowd.core.entity.DatasetEntity;
 import com.datacrowd.core.entity.DatasetStatus;
+import com.datacrowd.core.entity.DatasetSourceType;
 import com.datacrowd.core.entity.ProjectEntity;
 import com.datacrowd.core.repo.DatasetRepository;
 import com.datacrowd.core.repo.ProjectRepository;
@@ -60,6 +61,17 @@ public class DatasetService {
         String sourcePath = storageService.saveDatasetSource(d.getId(), file);
         d.setSourcePath(sourcePath);
 
+        // Optional: if uploaded as .zip, extract and locate manifest.jsonl for multimedia datasets.
+        String originalName = (file != null ? file.getOriginalFilename() : null);
+        if (originalName != null && originalName.toLowerCase().endsWith(".zip")) {
+            String manifestPath = storageService.extractDatasetZipAndFindManifest(d.getId(), sourcePath);
+            d.setSourceType(DatasetSourceType.ZIP_MANIFEST);
+            d.setManifestPath(manifestPath);
+        } else {
+            d.setSourceType(DatasetSourceType.FILE);
+            d.setManifestPath(null);
+        }
+
         return datasetRepository.save(d);
     }
 
@@ -92,6 +104,8 @@ public class DatasetService {
         Map<String, Object> body = Map.of(
                 "datasetId", datasetId.toString(),
                 "sourcePath", d.getSourcePath(),
+                "sourceType", d.getSourceType() != null ? d.getSourceType().name() : null,
+                "manifestPath", d.getManifestPath(),
                 "batchSize", req.batchSize,
                 "reviewersCount", req.reviewersCount,
                 "rewardPoints", req.rewardPoints

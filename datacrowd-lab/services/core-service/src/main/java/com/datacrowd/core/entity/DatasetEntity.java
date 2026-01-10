@@ -34,6 +34,14 @@ public class DatasetEntity {
     @Column(name = "source_path", columnDefinition = "text")
     private String sourcePath;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "source_type", nullable = false)
+    private DatasetSourceType sourceType = DatasetSourceType.FILE;
+
+    @Column(name = "manifest_path", columnDefinition = "text")
+    private String manifestPath;
+
+
     // В БД: status varchar NOT NULL DEFAULT 'NEW' (V2)
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
@@ -68,6 +76,12 @@ public class DatasetEntity {
 
     public String getSourcePath() { return sourcePath; }
     public void setSourcePath(String sourcePath) { this.sourcePath = sourcePath; }
+
+    public DatasetSourceType getSourceType() { return sourceType; }
+    public void setSourceType(DatasetSourceType sourceType) { this.sourceType = sourceType; }
+
+    public String getManifestPath() { return manifestPath; }
+    public void setManifestPath(String manifestPath) { this.manifestPath = manifestPath; }
 
     public DatasetStatus getStatus() { return status; }
     public void setStatus(DatasetStatus status) { this.status = status; }

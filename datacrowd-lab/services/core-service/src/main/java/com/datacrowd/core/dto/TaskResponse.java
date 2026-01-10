@@ -13,4 +13,5 @@ public class TaskResponse {
     public UUID lockedByUserId;
     public Instant lockedAt;
     public Instant createdAt;
+    public String assetUrl;
 }

@@ -103,6 +103,8 @@ type Service struct {
 type GenerateTasksRequest struct {
 	DatasetId      string `json:"datasetId"`
 	SourcePath     string `json:"sourcePath"`
+	SourceType     string `json:"sourceType,omitempty"`
+	ManifestPath   string `json:"manifestPath,omitempty"`
 	BatchSize      int    `json:"batchSize"`
 	ReviewersCount int    `json:"reviewersCount"`
 	RewardPoints   int    `json:"rewardPoints"`
@@ -199,6 +201,18 @@ func (s *Service) generateTasks(ctx context.Context, req GenerateTasksRequest) e
 	// mark dataset GENERATING is already done by core, but safe to keep idempotent.
 	_ = s.patchDatasetStatus(ctx, req.DatasetId, "GENERATING")
 
+	if strings.EqualFold(strings.TrimSpace(req.SourceType), "ZIP_MANIFEST") || strings.TrimSpace(req.ManifestPath) != "" {
+		mp := strings.TrimSpace(req.ManifestPath)
+		if mp == "" {
+			return fmt.Errorf("manifestPath is required for ZIP_MANIFEST datasets")
+		}
+		manifestAbs, err := s.resolvePathWithinDataDir(mp)
+		if err != nil {
+			return err
+		}
+		return s.generateFromManifestJSONL(ctx, req.DatasetId, manifestAbs, req.BatchSize)
+	}
+
 	ext := strings.ToLower(filepath.Ext(absPath))
 	switch ext {
 	case ".csv":
@@ -210,20 +224,14 @@ func (s *Service) generateTasks(ctx context.Context, req GenerateTasksRequest) e
 	}
 }
 
-func (s *Service) resolveSourcePath(sourcePath string) (string, error) {
-	p := strings.TrimSpace(sourcePath)
+func (s *Service) resolvePathWithinDataDir(path string) (string, error) {
+	p := strings.TrimSpace(path)
 	if p == "" {
-		return "", errors.New("sourcePath is empty")
+		return "", fmt.Errorf("path is required")
 	}
-
-	// If core provided an absolute path (/data/...), keep it.
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(s.cfg.DataDir, p)
-	}
-
 	abs, err := filepath.Abs(filepath.Clean(p))
 	if err != nil {
-		return "", fmt.Errorf("failed to resolve sourcePath: %w", err)
+		return "", fmt.Errorf("failed to resolve path: %w", err)
 	}
 
 	dataAbs, err := filepath.Abs(filepath.Clean(s.cfg.DataDir))
@@ -234,18 +242,20 @@ func (s *Service) resolveSourcePath(sourcePath string) (string, error) {
 	// Security: ensure file is within DATA_DIR
 	rel, err := filepath.Rel(dataAbs, abs)
 	if err != nil || strings.HasPrefix(rel, "..") {
-		return "", fmt.Errorf("sourcePath must be inside DATA_DIR (%s)", dataAbs)
+		return "", fmt.Errorf("path must be inside DATA_DIR (%s)", dataAbs)
 	}
 
-	st, err := os.Stat(abs)
+	return abs, nil
+}
+
+func (s *Service) resolveSourcePath(sourcePath string) (string, error) {
+	abs, err := s.resolvePathWithinDataDir(sourcePath)
 	if err != nil {
-		return "", fmt.Errorf("source file not found: %s", abs)
-	}
-	if st.IsDir() {
-		return "", fmt.Errorf("sourcePath points to a directory: %s", abs)
+		return "", fmt.Errorf("failed to resolve sourcePath: %w", err)
 	}
 	return abs, nil
 }
+
 
 func (s *Service) generateFromJSONL(ctx context.Context, datasetId, absPath string, batchSize int) error {
 	f, err := os.Open(absPath)
@@ -303,6 +313,109 @@ func (s *Service) generateFromJSONL(ctx context.Context, datasetId, absPath stri
 	_ = s.patchDatasetTotalItems(ctx, datasetId, total)
 	return s.patchDatasetStatus(ctx, datasetId, "READY")
 }
+
+
+func (s *Service) generateFromManifestJSONL(ctx context.Context, datasetId, manifestAbsPath string, batchSize int) error {
+	f, err := os.Open(manifestAbsPath)
+	if err != nil {
+		return fmt.Errorf("failed to open manifest: %w", err)
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	// allow long JSON lines (up to ~8MB) because meta may contain text, etc.
+	buf := make([]byte, 0, 1024*1024)
+	scanner.Buffer(buf, 8*1024*1024)
+
+	total := 0
+	group := newBatchGroup(s.cfg.BatchBulkSize, s.cfg.MaxTasksPerBulk)
+
+	lineNo := 0
+	for scanner.Scan() {
+		lineNo++
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+
+		// Parse arbitrary JSON object from manifest line.
+		var obj map[string]any
+		if err := json.Unmarshal([]byte(line), &obj); err != nil {
+			return fmt.Errorf("manifest json parse error (line %d): %w", lineNo, err)
+		}
+
+		itemId, _ := obj["id"].(string)
+		if itemId == "" {
+			// fallback to stable synthetic id
+			itemId = fmt.Sprintf("line-%d", lineNo)
+		}
+
+		typ, _ := obj["type"].(string)
+		if typ == "" {
+			typ = "asset"
+		}
+
+		// "file" (preferred) or "assetRelPath"
+		assetRelPath := ""
+		if v, ok := obj["file"].(string); ok && strings.TrimSpace(v) != "" {
+			assetRelPath = strings.TrimSpace(v)
+		} else if v, ok := obj["assetRelPath"].(string); ok && strings.TrimSpace(v) != "" {
+			assetRelPath = strings.TrimSpace(v)
+		}
+
+		// "text" optional
+		textVal := ""
+		if v, ok := obj["text"].(string); ok {
+			textVal = v
+		}
+
+		// "meta" optional
+		metaVal, _ := obj["meta"]
+
+		payload := map[string]any{
+			"format":     "manifest-jsonl",
+			"manifest":   manifestAbsPath,
+			"lineNumber": lineNo,
+			"itemId":     itemId,
+			"type":       typ,
+		}
+		if assetRelPath != "" {
+			// Keep RELATIVE path from zip root; core-service will resolve inside dataset folder.
+			payload["assetRelPath"] = assetRelPath
+		}
+		if strings.TrimSpace(textVal) != "" {
+			payload["text"] = textVal
+		}
+		if metaVal != nil {
+			payload["meta"] = metaVal
+		}
+
+		payloadBytes, _ := json.Marshal(payload)
+		group.addTask(preTask{payloadJson: string(payloadBytes), status: "NEW"})
+		total++
+
+		if group.shouldFlush(batchSize) {
+			if err := s.flushGroup(ctx, datasetId, group, batchSize); err != nil {
+				return err
+			}
+			group.reset()
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("manifest scan error: %w", err)
+	}
+
+	if group.hasAny() {
+		if err := s.flushGroup(ctx, datasetId, group, batchSize); err != nil {
+			return err
+		}
+	}
+
+	_ = s.patchDatasetTotalItems(ctx, datasetId, total)
+	return s.patchDatasetStatus(ctx, datasetId, "READY")
+}
+
 
 func (s *Service) generateFromCSV(ctx context.Context, datasetId, absPath string, batchSize int) error {
 	f, err := os.Open(absPath)

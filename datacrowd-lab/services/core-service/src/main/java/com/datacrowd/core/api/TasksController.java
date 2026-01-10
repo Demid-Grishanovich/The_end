@@ -7,9 +7,17 @@ import com.datacrowd.core.entity.TaskEntity;
 import com.datacrowd.core.security.AuthContext;
 import com.datacrowd.core.service.WorkerTaskService;
 import jakarta.validation.Valid;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.ResourceRegion;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpRange;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.UUID;
 
 @RestController
@@ -55,6 +63,58 @@ public class TasksController {
         out.taskStatus = res.task().getStatus().name();
         out.pointsAwarded = res.pointsAwarded();
         return out;
+    }
+
+    /**
+     * Streams an asset referenced by the task payload (for front-end usage).
+     *
+     * Important: In Postman it may look like a "download", but in a browser the same URL can be used
+     * directly in <img src="..."> or <audio src="..."> and will render/play inline because we set
+     * Content-Type and Content-Disposition: inline.
+     */
+    @GetMapping("/{id}/asset")
+    public ResponseEntity<?> getAsset(@PathVariable UUID id, @RequestHeader HttpHeaders headers) {
+        UUID userId = AuthContext.getUserIdOrThrow();
+        Path file = workerTaskService.resolveTaskAssetPath(id, userId);
+
+        String contentType;
+        try {
+            contentType = Files.probeContentType(file);
+        } catch (Exception e) {
+            contentType = null;
+        }
+        if (contentType == null || contentType.isBlank()) {
+            contentType = MediaType.APPLICATION_OCTET_STREAM_VALUE;
+        }
+
+        Resource resource = new FileSystemResource(file);
+
+        // Support HTTP Range for audio/video seeking.
+        var ranges = headers.getRange();
+        if (ranges != null && !ranges.isEmpty()) {
+            long contentLength;
+            try {
+                contentLength = resource.contentLength();
+            } catch (Exception e) {
+                contentLength = -1;
+            }
+
+            HttpRange range = ranges.get(0);
+            long start = range.getRangeStart(contentLength);
+            long end = range.getRangeEnd(contentLength);
+            long regionLength = Math.max(0, end - start + 1);
+
+            ResourceRegion region = new ResourceRegion(resource, start, regionLength);
+            return ResponseEntity.status(206)
+                    .contentType(MediaType.parseMediaType(contentType))
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
+                    .body(region);
+        }
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(contentType))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
+                .body(resource);
     }
 
     private TaskResponse toResponse(TaskEntity t) {

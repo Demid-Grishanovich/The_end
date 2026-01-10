@@ -47,6 +47,8 @@ public class DatasetsController {
         r.id = d.getId();
         r.projectId = d.getProjectId();
         r.sourcePath = d.getSourcePath();
+        r.sourceType = d.getSourceType() != null ? d.getSourceType().name() : null;
+        r.manifestPath = d.getManifestPath();
         r.status = d.getStatus();
         r.totalItems = d.getTotalItems();
         r.createdAt = d.getCreatedAt();

@@ -7,10 +7,14 @@ import com.datacrowd.core.entity.*;
 import com.datacrowd.core.repo.AnswerRepository;
 import com.datacrowd.core.repo.ProjectRepository;
 import com.datacrowd.core.repo.TaskRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.PageRequest;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -22,15 +26,21 @@ public class WorkerTaskService {
     private final ProjectRepository projectRepository;
     private final AnswerRepository answerRepository;
     private final PointsService pointsService;
+    private final StorageService storageService;
+    private final ObjectMapper objectMapper;
 
     public WorkerTaskService(TaskRepository taskRepository,
                              ProjectRepository projectRepository,
                              AnswerRepository answerRepository,
-                             PointsService pointsService) {
+                             PointsService pointsService,
+                             StorageService storageService,
+                             ObjectMapper objectMapper) {
         this.taskRepository = taskRepository;
         this.projectRepository = projectRepository;
         this.answerRepository = answerRepository;
         this.pointsService = pointsService;
+        this.storageService = storageService;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -135,6 +145,52 @@ public class WorkerTaskService {
 
         taskRepository.save(task);
         return new SubmitResult(task, answer, awarded);
+    }
+
+    /**
+     * Returns absolute path to an asset referenced from task payload.
+     *
+     * The payload is expected to contain one of:
+     * - assetRelPath
+     * - file (from manifest.jsonl)
+     */
+    @Transactional(readOnly = true)
+    public Path resolveTaskAssetPath(UUID taskId, UUID requesterUserId) {
+        TaskEntity task = taskRepository.findById(taskId)
+                .orElseThrow(() -> new ApiNotFoundException("Task not found: " + taskId));
+
+        // Basic access rule: allow if task is not locked OR locked by requester.
+        // (Prevents random users from browsing dataset files.)
+        if (task.getLockedByUserId() != null && !task.getLockedByUserId().equals(requesterUserId)) {
+            throw new ApiForbiddenException("Task is locked by another user");
+        }
+
+        String payload = task.getPayloadJson();
+        if (payload == null || payload.isBlank()) {
+            throw new ApiNotFoundException("Task has no payload");
+        }
+
+        String rel;
+        try {
+            JsonNode n = objectMapper.readTree(payload);
+            JsonNode v = n.get("assetRelPath");
+            if (v == null || v.isNull() || v.asText().isBlank()) {
+                v = n.get("file");
+            }
+            rel = (v == null || v.isNull()) ? null : v.asText();
+        } catch (Exception e) {
+            throw new ApiConflictException("Task payload is not valid JSON");
+        }
+
+        if (rel == null || rel.isBlank()) {
+            throw new ApiNotFoundException("Task does not reference an asset");
+        }
+
+        Path p = storageService.resolveDatasetAsset(task.getDatasetId(), rel);
+        if (!Files.exists(p) || !Files.isRegularFile(p)) {
+            throw new ApiNotFoundException("Asset file not found");
+        }
+        return p;
     }
 
     public record SubmitResult(TaskEntity task, AnswerEntity answer, int pointsAwarded) {}
