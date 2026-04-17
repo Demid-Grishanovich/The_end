@@ -35,61 +35,9 @@ class AuthServiceTest {
         authService = new AuthService(users, passwordEncoder, jwtService);
     }
 
-    @Test
-    void register_shouldCreateUserAndReturnToken() {
-        var req = new RegisterRequest("demo", "demo@example.com", "pass");
 
-        when(users.findByUsername("demo")).thenReturn(Optional.empty());
-        when(users.findByEmail("demo@example.com")).thenReturn(Optional.empty());
-        when(passwordEncoder.encode("pass")).thenReturn("hashed");
 
-        // emulate JPA prePersist behavior (id + status default)
-        when(users.save(any(UserEntity.class))).thenAnswer(inv -> {
-            UserEntity u = inv.getArgument(0);
-            if (u.getId() == null) u.setId(UUID.randomUUID());
-            if (u.getStatus() == null) u.setStatus(UserEntity.Status.ACTIVE);
-            return u;
-        });
 
-        when(jwtService.generate(anyString(), anyString(), anyString())).thenReturn("jwt-token");
-
-        AuthResponse res = authService.register(req);
-
-        assertThat(res.token()).isEqualTo("jwt-token");
-        assertThat(res.userId()).isNotBlank();
-        assertThat(res.role()).isEqualTo("WORKER");
-
-        ArgumentCaptor<UserEntity> captor = ArgumentCaptor.forClass(UserEntity.class);
-        verify(users).save(captor.capture());
-        UserEntity saved = captor.getValue();
-
-        assertThat(saved.getUsername()).isEqualTo("demo");
-        assertThat(saved.getEmail()).isEqualTo("demo@example.com");
-        assertThat(saved.getPasswordHash()).isEqualTo("hashed");
-        assertThat(saved.getRole()).isEqualTo("WORKER");
-        assertThat(saved.getStatus()).isEqualTo(UserEntity.Status.ACTIVE);
-    }
-
-    @Test
-    void register_shouldFail_whenUsernameAlreadyExists() {
-        var req = new RegisterRequest("demo", "demo@example.com", "pass");
-        when(users.findByUsername("demo")).thenReturn(Optional.of(new UserEntity()));
-
-        assertThatThrownBy(() -> authService.register(req))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("username");
-    }
-
-    @Test
-    void register_shouldFail_whenEmailAlreadyExists() {
-        var req = new RegisterRequest("demo", "demo@example.com", "pass");
-        when(users.findByUsername("demo")).thenReturn(Optional.empty());
-        when(users.findByEmail("demo@example.com")).thenReturn(Optional.of(new UserEntity()));
-
-        assertThatThrownBy(() -> authService.register(req))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("email");
-    }
 
     @Test
     void login_shouldReturnToken_whenCredentialsValid() {

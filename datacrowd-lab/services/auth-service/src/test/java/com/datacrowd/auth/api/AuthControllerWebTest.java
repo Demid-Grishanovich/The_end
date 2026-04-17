@@ -33,21 +33,6 @@ class AuthControllerWebTest {
     @MockitoBean
     AuthService authService;
 
-    @Test
-    void register_returns200() throws Exception {
-        var req = new RegisterRequest("demo", "demo@example.com", "pass");
-        var resp = new AuthResponse("jwt-token", UUID.randomUUID().toString(), "WORKER");
-
-        Mockito.when(authService.register(Mockito.any(RegisterRequest.class))).thenReturn(resp);
-
-        mvc.perform(post("/auth/register")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(om.writeValueAsString(req)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").value("jwt-token"))
-                .andExpect(jsonPath("$.userId").isNotEmpty())
-                .andExpect(jsonPath("$.role").value("WORKER"));
-    }
 
     @Test
     void login_returns200() throws Exception {

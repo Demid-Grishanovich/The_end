@@ -23,7 +23,7 @@ public class AuthService {
         this.jwtService = jwtService;
     }
 
-    public AuthResponse register(RegisterRequest request) {
+    public AuthResponse register(RegisterRequest request, String role) {
         users.findByUsername(request.username())
                 .ifPresent(u -> { throw new IllegalArgumentException("username taken"); });
 
@@ -34,7 +34,7 @@ public class AuthService {
         user.setUsername(request.username());
         user.setEmail(request.email());
         user.setPasswordHash(passwordEncoder.encode(request.password()));
-        user.setRole("WORKER");
+        user.setRole(role);
 
         // если у тебя есть status в entity — можно тут поставить ACTIVE
         // user.setStatus(UserEntity.Status.ACTIVE);
