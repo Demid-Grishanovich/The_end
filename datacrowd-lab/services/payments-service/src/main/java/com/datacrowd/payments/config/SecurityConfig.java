@@ -1,55 +1,31 @@
 package com.datacrowd.payments.config;
 
-import com.datacrowd.payments.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
-        http
-                .csrf(csrf -> csrf.disable())
-                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .httpBasic(b -> b.disable())     // ✅ IMPORTANT: no browser basic-auth popup
-                .formLogin(f -> f.disable());
-
-        http.authorizeHttpRequests(auth -> auth
-                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-
-                // ✅ Swagger / OpenAPI / Actuator
-                .requestMatchers(
-                        "/actuator/**",
-                        "/v3/api-docs/**",
-                        "/swagger-ui/**",
-                        "/swagger-ui.html"
-                ).permitAll()
-
-                .requestMatchers("/payments/ping").permitAll()
-
-                // Stripe webhooks без JWT
-                .requestMatchers("/webhooks/**").permitAll()
-
-                // checkout — только CLIENT
-                .requestMatchers("/payments/checkout").hasRole("CLIENT")
-
-                // остальное в /payments/** требует JWT
-                .requestMatchers("/payments/**").authenticated()
-
-
-
-                .anyRequest().denyAll()
-        );
-
-        http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
-        return http.build();
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        return http
+                .csrf(AbstractHttpConfigurer::disable)
+                .authorizeHttpRequests(auth -> auth
+                        // 1. Сначала специфичные правила (Swagger)
+                        .requestMatchers(
+                                "/v3/api-docs/**",
+                                "/swagger-ui/**",
+                                "/swagger-ui.html",
+                                "/webjars/**"
+                        ).permitAll()
+                        // 2. Потом финальное общее правило
+                        .anyRequest().permitAll()
+                )
+                .build();
     }
 }

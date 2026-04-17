@@ -34,3 +34,13 @@ management:
     web:
       exposure:
         include: health,info
+
+springdoc:
+  swagger-ui:
+    urls:
+      - name: "Auth Service"
+        url: "/api/auth/v3/api-docs"
+      - name: "Core Service"
+        url: "/api/core/v3/api-docs"
+      - name: "Payments Service"
+        url: "/api/payments/v3/api-docs"

@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -101,15 +102,14 @@ public class DatasetService {
         d.setStatus(DatasetStatus.GENERATING);
         datasetRepository.save(d);
 
-        Map<String, Object> body = Map.of(
-                "datasetId", datasetId.toString(),
-                "sourcePath", d.getSourcePath(),
-                "sourceType", d.getSourceType() != null ? d.getSourceType().name() : null,
-                "manifestPath", d.getManifestPath(),
-                "batchSize", req.batchSize,
-                "reviewersCount", req.reviewersCount,
-                "rewardPoints", req.rewardPoints
-        );
+        Map<String, Object> body = new HashMap<>();
+        body.put("datasetId", datasetId.toString());
+        body.put("sourcePath", d.getSourcePath());
+        body.put("sourceType", d.getSourceType() != null ? d.getSourceType().name() : null);
+        body.put("manifestPath", d.getManifestPath());
+        body.put("batchSize", req.batchSize);
+        body.put("reviewersCount", req.reviewersCount);
+        body.put("rewardPoints", req.rewardPoints);
 
         runnerClient.triggerGenerate(datasetId, body);
     }
