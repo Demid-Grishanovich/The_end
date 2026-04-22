@@ -2,6 +2,7 @@ package com.datacrowd.auth.api;
 
 import com.datacrowd.auth.service.AuthService;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -13,17 +14,27 @@ public class AuthController {
 
     private final AuthService authService;
 
+    @Value("${app.admin-key:demo-admin-key}")
+    private String configuredAdminKey;
+
     public AuthController(AuthService authService) {
         this.authService = authService;
     }
 
     @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@RequestBody RegisterRequest req) {
+    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest req) {
         return ResponseEntity.ok(authService.register(req, "WORKER"));
     }
 
     @PostMapping("/register-client")
-    public ResponseEntity<AuthResponse> registerClient(@RequestBody RegisterRequest req) {
+    public ResponseEntity<AuthResponse> registerClient(
+            @Valid @RequestBody RegisterRequest req,
+            @RequestHeader(value = "X-Admin-Key", required = false) String adminKey) {
+
+        if (adminKey == null || !configuredAdminKey.equals(adminKey)) {
+            throw new IllegalArgumentException("Forbidden: valid X-Admin-Key header required");
+        }
+
         return ResponseEntity.ok(authService.register(req, "CLIENT"));
     }
 
@@ -32,18 +43,11 @@ public class AuthController {
         return authService.login(request);
     }
 
-    /**
-     * Обновление access JWT по текущему access JWT (пока он валиден).
-     * Authorization: Bearer <token>
-     */
     @PostMapping("/refresh")
     public AuthResponse refresh(@RequestHeader(name = "Authorization", required = false) String authorization) {
         return authService.refreshFromAccessToken(authorization);
     }
 
-    /**
-     * Logout (JWT stateless): клиент удаляет токен. Мы возвращаем 204.
-     */
     @PostMapping("/logout")
     public ResponseEntity<Void> logout() {
         authService.logout();

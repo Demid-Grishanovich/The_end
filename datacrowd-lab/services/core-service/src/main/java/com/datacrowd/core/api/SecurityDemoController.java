@@ -1,6 +1,7 @@
 package com.datacrowd.core.api;
 
 import com.datacrowd.core.security.AuthContext;
+import org.springframework.context.annotation.Profile;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -8,6 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.HashMap;
 
+@Profile("dev")
 @RestController
 @RequestMapping("/core/security-demo")
 public class SecurityDemoController {

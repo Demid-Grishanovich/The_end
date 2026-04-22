@@ -5,7 +5,7 @@ spring:
   api-docs:
     path: /v3/api-docs
   swagger-ui:
-      path: /swagger-ui.html
+    path: /swagger-ui.html
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/auth_db}
     username: ${SPRING_DATASOURCE_USERNAME:auth_user}
@@ -29,10 +29,8 @@ management:
       exposure:
         include: health,info
 
-# Оставляем тот же ключ свойства, но убираем хардкод секретов
 app:
   jwt:
     secret: ${JWT_SECRET:}
     ttl-minutes: ${JWT_TTL_MINUTES:60}
-
-
+  admin-key: ${ADMIN_KEY:demo-admin-key}
