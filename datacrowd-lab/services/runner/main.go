@@ -130,7 +130,80 @@ type coreTaskItem struct {
 	PayloadJson string `json:"payloadJson"`
 	Status      string `json:"status"`
 }
+type failedItemRequest struct {
+	LineNumber int    `json:"lineNumber"`
+	RawContent string `json:"rawContent"`
+	ErrorMsg   string `json:"errorMsg"`
+}
 
+// HuggingFace Pre-annotation структуры
+type hfRequest struct {
+	Inputs string `json:"inputs"`
+}
+
+type hfLabel struct {
+	Label string  `json:"label"`
+	Score float64 `json:"score"`
+}
+
+// callHuggingFace вызывает бесплатный Inference API HuggingFace для текстовой классификации.
+// Модель: cardiffnlp/twitter-roberta-base-sentiment-latest
+// Возвращает (label, confidence, error)
+// Если API недоступен — возвращает ошибку, задача создаётся как обычно без AI аннотации.
+func callHuggingFace(text string) (string, float64, error) {
+	if strings.TrimSpace(text) == "" {
+		return "", 0, fmt.Errorf("empty text")
+	}
+
+	apiURL := "https://api-inference.huggingface.co/models/cardiffnlp/twitter-roberta-base-sentiment-latest"
+
+	bodyBytes, _ := json.Marshal(hfRequest{Inputs: text})
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Post(apiURL, "application/json", strings.NewReader(string(bodyBytes)))
+	if err != nil {
+		return "", 0, fmt.Errorf("huggingface request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", 0, fmt.Errorf("huggingface returned status %d", resp.StatusCode)
+	}
+
+	// HuggingFace возвращает [[{label, score}, ...]]
+	var result [][]hfLabel
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", 0, fmt.Errorf("huggingface response decode error: %w", err)
+	}
+
+	if len(result) == 0 || len(result[0]) == 0 {
+		return "", 0, fmt.Errorf("empty huggingface response")
+	}
+
+	// Находим метку с максимальным score
+	best := result[0][0]
+	for _, r := range result[0] {
+		if r.Score > best.Score {
+			best = r
+		}
+	}
+
+	return strings.ToLower(best.Label), best.Score, nil
+}
+
+// reportFailedItem отправляет битую строку в Dead Letter Queue.
+// Не останавливает обработку если DLQ недоступен.
+func (s *Service) reportFailedItem(ctx context.Context, datasetID string, lineNo int, raw, errMsg string) {
+	req := failedItemRequest{
+		LineNumber: lineNo,
+		RawContent: raw,
+		ErrorMsg:   errMsg,
+	}
+	path := fmt.Sprintf("/internal/datasets/%s/failed-items", datasetID)
+	if err := s.corePOST(ctx, path, req, nil); err != nil {
+		log.Printf("[DLQ] Failed to report failed item (line %d): %v", lineNo, err)
+	}
+}
 func (s *Service) handleGenerateTasks(w http.ResponseWriter, r *http.Request) {
 	// POST /api/v1/runner/datasets/{datasetId}/generate-tasks
 	if r.Method != http.MethodPost {
@@ -256,7 +329,6 @@ func (s *Service) resolveSourcePath(sourcePath string) (string, error) {
 	return abs, nil
 }
 
-
 func (s *Service) generateFromJSONL(ctx context.Context, datasetId, absPath string, batchSize int) error {
 	f, err := os.Open(absPath)
 	if err != nil {
@@ -314,7 +386,6 @@ func (s *Service) generateFromJSONL(ctx context.Context, datasetId, absPath stri
 	return s.patchDatasetStatus(ctx, datasetId, "READY")
 }
 
-
 func (s *Service) generateFromManifestJSONL(ctx context.Context, datasetId, manifestAbsPath string, batchSize int) error {
 	f, err := os.Open(manifestAbsPath)
 	if err != nil {
@@ -341,7 +412,9 @@ func (s *Service) generateFromManifestJSONL(ctx context.Context, datasetId, mani
 		// Parse arbitrary JSON object from manifest line.
 		var obj map[string]any
 		if err := json.Unmarshal([]byte(line), &obj); err != nil {
-			return fmt.Errorf("manifest json parse error (line %d): %w", lineNo, err)
+			// НОВОЕ: пишем в DLQ вместо остановки обработки
+			s.reportFailedItem(ctx, datasetId, lineNo, line, err.Error())
+			continue
 		}
 
 		itemId, _ := obj["id"].(string)
@@ -372,12 +445,24 @@ func (s *Service) generateFromManifestJSONL(ctx context.Context, datasetId, mani
 		// "meta" optional
 		metaVal, _ := obj["meta"]
 
+		isHoneypot := false
+		if v, ok := obj["isHoneypot"].(bool); ok {
+			isHoneypot = v
+		}
+		expectedAnswer := ""
+		if v, ok := obj["expectedAnswer"].(string); ok {
+			expectedAnswer = strings.TrimSpace(v)
+		}
+
 		payload := map[string]any{
 			"format":     "manifest-jsonl",
 			"manifest":   manifestAbsPath,
 			"lineNumber": lineNo,
 			"itemId":     itemId,
 			"type":       typ,
+			// Honeypot поля — скрыты от воркера, проверяются при submit
+			"isHoneypot":     isHoneypot,
+			"expectedAnswer": expectedAnswer,
 		}
 		if assetRelPath != "" {
 			// Keep RELATIVE path from zip root; core-service will resolve inside dataset folder.
@@ -416,7 +501,6 @@ func (s *Service) generateFromManifestJSONL(ctx context.Context, datasetId, mani
 	return s.patchDatasetStatus(ctx, datasetId, "READY")
 }
 
-
 func (s *Service) generateFromCSV(ctx context.Context, datasetId, absPath string, batchSize int) error {
 	f, err := os.Open(absPath)
 	if err != nil {
@@ -443,18 +527,53 @@ func (s *Service) generateFromCSV(ctx context.Context, datasetId, absPath string
 	rowNo := 1 // first row after header is 1
 
 	for {
-		_, err := r.Read()
+		record, err := r.Read()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			return fmt.Errorf("csv read error (row %d): %w", rowNo, err)
+			// НОВОЕ: пишем битую строку в DLQ вместо остановки обработки
+			s.reportFailedItem(ctx, datasetId, rowNo, "", err.Error())
+			rowNo++
+			continue
+		}
+		_ = record
+		isHoneypot := false
+		expectedAnswer := ""
+		if len(record) >= 3 {
+			isHoneypot = strings.EqualFold(strings.TrimSpace(record[2]), "true")
+		}
+		if len(record) >= 4 {
+			expectedAnswer = strings.TrimSpace(record[3])
+		}
+
+		// Текст задачи — обычно вторая колонка CSV (id, text, ...)
+		taskText := ""
+		if len(record) >= 2 {
+			taskText = strings.TrimSpace(record[1])
 		}
 
 		payload := map[string]any{
-			"filePath":  absPath,
-			"format":    "csv",
-			"rowNumber": rowNo,
+			"filePath":       absPath,
+			"format":         "csv",
+			"rowNumber":      rowNo,
+			"text":           strings.Join(record, ","),
+			"isHoneypot":     isHoneypot,
+			"expectedAnswer": expectedAnswer,
+		}
+
+		// Pre-annotation: вызываем HuggingFace для текстовых задач
+		// AI работает как "тихий судья" — воркер не видит предсказание
+		// При submit Java сравнит ответ воркера с aiSuggestedLabel
+		if taskText != "" && !isHoneypot {
+			if label, score, err := callHuggingFace(taskText); err == nil && score > 0.5 {
+				payload["aiSuggestedLabel"] = label
+				payload["aiConfidence"] = score
+				payload["aiModel"] = "cardiffnlp/twitter-roberta-base-sentiment-latest"
+			} else if err != nil {
+				// API недоступен — не блокируем создание задачи
+				log.Printf("[PreAnnotation] HuggingFace unavailable for row %d: %v", rowNo, err)
+			}
 		}
 		payloadBytes, _ := json.Marshal(payload)
 

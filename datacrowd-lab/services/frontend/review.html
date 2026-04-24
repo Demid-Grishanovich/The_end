@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DataCrowd Lab — Review</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav>
+  <a href="worker.html" class="nav-logo">🏷 DataCrowd Lab</a>
+  <div class="nav-r">
+    <span class="chip">Reviewer</span>
+    <span class="nav-name" id="uname"></span>
+    <a href="stats.html" class="btn btn-o btn-sm">📊 Stats</a>
+    <button class="btn btn-g btn-sm" onclick="logout()">Logout</button>
+  </div>
+</nav>
+<div class="wrap-sm">
+  <div class="ph">
+    <div>
+      <div class="ptitle">Review Queue</div>
+      <div class="psub">Review submitted answers — approve good work, reject poor quality</div>
+    </div>
+  </div>
+
+  <div id="msg" class="hide"></div>
+
+  <!-- Empty state -->
+  <div id="empty" class="card tc" style="padding:60px 40px">
+    <div style="font-size:48px;margin-bottom:14px">🔍</div>
+    <div style="font-size:18px;font-weight:600;margin-bottom:8px">Review Queue</div>
+    <div style="font-size:14px;color:var(--ts);margin-bottom:22px">Load the next answer waiting for your review</div>
+    <button class="btn btn-p" id="loadBtn" onclick="loadNext()">Load Next Answer</button>
+  </div>
+
+  <!-- Review section -->
+  <div id="reviewSec" class="hide">
+    <!-- Answer info -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--p);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Answer for Review</div>
+          <div style="font-size:12px;color:var(--ts)">Answer ID: <span id="aidDisp" style="font-family:monospace"></span></div>
+        </div>
+        <span class="badge b-new">Pending Review</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:var(--bg);border-radius:var(--rs);padding:10px">
+          <div style="font-size:11px;color:var(--ts);margin-bottom:2px">Task ID</div>
+          <div style="font-size:12px;font-weight:500;font-family:monospace" id="tidDisp">—</div>
+        </div>
+        <div style="background:var(--bg);border-radius:var(--rs);padding:10px">
+          <div style="font-size:11px;color:var(--ts);margin-bottom:2px">Worker</div>
+          <div style="font-size:12px;font-weight:500;font-family:monospace" id="widDisp">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Original task content -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Original Task Content</div>
+      <div class="task-content" id="origContent">—</div>
+    </div>
+
+    <!-- Worker's answer -->
+    <div class="card" style="margin-bottom:14px;border:2px solid var(--p)">
+      <div style="font-size:11px;font-weight:600;color:var(--p);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Worker's Answer</div>
+      <div style="background:var(--pl);border-radius:var(--rs);padding:16px">
+        <div id="workerAnswer" style="font-size:18px;font-weight:700;color:var(--p)">—</div>
+        <div id="workerAnswerRaw" style="font-size:12px;color:var(--ts);margin-top:6px;font-family:monospace"></div>
+      </div>
+    </div>
+
+    <!-- Comment -->
+    <div class="card" style="margin-bottom:14px">
+      <label class="lbl">Review Comment (optional)</label>
+      <textarea id="comment" class="ta" style="min-height:70px" placeholder="Add a note for the worker about why you approved or rejected..."></textarea>
+    </div>
+
+    <!-- Decision buttons -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <button id="rejectBtn" class="btn" style="justify-content:center;padding:14px;background:#fef2f2;color:#b91c1c;border:2px solid #fecaca;font-size:15px;font-weight:600" onclick="decide('reject')">
+        ❌ Reject
+      </button>
+      <button id="approveBtn" class="btn" style="justify-content:center;padding:14px;background:var(--okl);color:#15803d;border:2px solid #bbf7d0;font-size:15px;font-weight:600" onclick="decide('approve')">
+        ✅ Approve
+      </button>
+    </div>
+    <div style="margin-top:10px">
+      <button class="btn btn-g" style="width:100%;justify-content:center" onclick="skip()">Skip (load next)</button>
+    </div>
+  </div>
+
+  <!-- Decision done state -->
+  <div id="doneState" class="hide card tc" style="padding:44px">
+    <div style="font-size:48px;margin-bottom:12px" id="doneIcon">✅</div>
+    <div style="font-size:18px;font-weight:600;margin-bottom:8px" id="doneTitle">Answer Approved</div>
+    <div style="font-size:14px;color:var(--ts);margin-bottom:20px" id="doneMsg"></div>
+    <button class="btn btn-p" onclick="nextReview()">Next Answer →</button>
+  </div>
+</div>
+
+<script>
+const API='http://localhost:8080/api';
+const tok=localStorage.token;
+if(!tok) location.href='index.html';
+document.getElementById('uname').textContent=localStorage.uname||'';
+function logout(){localStorage.clear();location.href='index.html';}
+
+let answer=null;
+const show=id=>document.getElementById(id).classList.remove('hide');
+const hide=id=>document.getElementById(id).classList.add('hide');
+
+async function loadNext(){
+  const btn=document.getElementById('loadBtn');
+  btn.disabled=true;btn.innerHTML='<span class="spin"></span> Loading...';
+  try{
+    const r=await fetch(`${API}/core/reviews/next`,{headers:{'Authorization':'Bearer '+tok}});
+    if(r.status===404||r.status===204){
+      showMsg('info','No answers waiting for review right now!');
+      btn.disabled=false;btn.textContent='Load Next Answer';
+      return;
+    }
+    answer=await r.json();
+    renderAnswer(answer);
+  }catch(e){showMsg('err','Failed: '+e.message);btn.disabled=false;btn.textContent='Load Next Answer';}
+}
+
+function renderAnswer(a){
+  hide('empty');hide('doneState');show('reviewSec');
+  document.getElementById('aidDisp').textContent=a.id.substring(0,8)+'...';
+  document.getElementById('tidDisp').textContent=(a.taskId||'').substring(0,8)+'...';
+  document.getElementById('widDisp').textContent=(a.userId||'').substring(0,8)+'...';
+  document.getElementById('comment').value='';
+
+  // Parse task payload for content
+  let content='Task content not available';
+  try{const p=JSON.parse(a.task?.payloadJson||'{}');content=p.text||p.content||p.filePath||JSON.stringify(p);}catch(e){}
+  document.getElementById('origContent').textContent=content;
+
+  // Parse worker answer
+  let label='—',raw=a.answerJson||'{}';
+  try{const aj=JSON.parse(a.answerJson||'{}');label=aj.label||JSON.stringify(aj);}catch(e){label=a.answerJson;}
+  document.getElementById('workerAnswer').textContent=label;
+  document.getElementById('workerAnswerRaw').textContent='Raw: '+raw;
+}
+
+async function decide(decision){
+  if(!answer) return;
+  const btn=document.getElementById(decision==='approve'?'approveBtn':'rejectBtn');
+  btn.disabled=true;btn.innerHTML='<span class="spin"></span> Submitting...';
+  const comment=document.getElementById('comment').value.trim();
+  try{
+    const r=await fetch(`${API}/core/reviews/${answer.id}/${decision}`,{
+      method:'POST',headers:{'Authorization':'Bearer '+tok,'Content-Type':'application/json'},
+      body:JSON.stringify({comment:comment||null})
+    });
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.detail||d.message||'Failed');
+    hide('reviewSec');show('doneState');
+    const approved=decision==='approve';
+    document.getElementById('doneIcon').textContent=approved?'✅':'❌';
+    document.getElementById('doneTitle').textContent=approved?'Answer Approved':'Answer Rejected';
+    document.getElementById('doneMsg').textContent=approved
+      ?`Worker earned ${d.pointsAwarded||0} points for this task.`
+      :'Task returned to queue for another worker.';
+    answer=null;
+  }catch(e){showMsg('err',e.message);btn.disabled=false;btn.textContent=decision==='approve'?'✅ Approve':'❌ Reject';}
+}
+
+function skip(){answer=null;hide('reviewSec');show('empty');document.getElementById('loadBtn').disabled=false;document.getElementById('loadBtn').textContent='Load Next Answer';loadNext();}
+function nextReview(){hide('doneState');show('empty');document.getElementById('loadBtn').disabled=false;document.getElementById('loadBtn').textContent='Load Next Answer';loadNext();}
+function showMsg(type,msg){const b=document.getElementById('msg');b.className='alert '+(type==='err'?'a-err':type==='ok'?'a-ok':'a-info');b.textContent=(type==='err'?'⚠ ':'ℹ ')+msg;}
+</script>
+</body>
+</html>

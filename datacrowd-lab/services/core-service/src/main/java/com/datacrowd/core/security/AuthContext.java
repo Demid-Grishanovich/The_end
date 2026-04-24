@@ -6,23 +6,18 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import java.util.Optional;
 import java.util.UUID;
 
-/**
- * Small helper to extract user info from Spring Security context.
- *
- * In this project Core-service authenticates requests via JwtAuthenticationFilter which sets JwtPrincipal as principal.
- */
 public final class AuthContext {
 
     private AuthContext() {}
 
-    /** Backward-compatible alias (controllers already use this). */
     public static UUID getUserIdOrThrow() {
         return requireUserId();
     }
 
     public static UUID requireUserId() {
         return getUserId()
-                .orElseThrow(() -> new IllegalStateException("No authenticated user in SecurityContext"));
+                .orElseThrow(() -> new IllegalStateException(
+                        "No authenticated user in SecurityContext"));
     }
 
     public static Optional<UUID> getUserId() {
@@ -37,8 +32,6 @@ public final class AuthContext {
                 return Optional.empty();
             }
         }
-
-        // Sometimes principal can be just a username string (depends on security setup)
         return Optional.empty();
     }
 
@@ -47,8 +40,21 @@ public final class AuthContext {
         if (auth == null) return Optional.empty();
 
         Object principal = auth.getPrincipal();
-        if (principal instanceof JwtPrincipal jp) return Optional.ofNullable(jp.username());
+        if (principal instanceof JwtPrincipal jp) {
+            return Optional.ofNullable(jp.username());
+        }
+        return Optional.empty();
+    }
 
+    // НОВОЕ: получить роль текущего пользователя
+    public static Optional<String> getCurrentRole() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) return Optional.empty();
+
+        Object principal = auth.getPrincipal();
+        if (principal instanceof JwtPrincipal jp) {
+            return Optional.ofNullable(jp.role());
+        }
         return Optional.empty();
     }
 }

@@ -1,5 +1,6 @@
 package com.datacrowd.core.service.billing;
 
+import com.datacrowd.core.entity.BillingStatus;
 import com.datacrowd.core.entity.ProjectEntity;
 import com.datacrowd.core.repo.ProjectRepository;
 import org.springframework.stereotype.Service;
@@ -17,18 +18,23 @@ public class BillingService {
     }
 
     @Transactional
-    public void grantPaidAccess(UUID projectId, int taskQuotaDelta, String billingStatus) {
+    public void grantPaidAccess(UUID projectId, int taskQuotaDelta, String billingStatusStr) {
         ProjectEntity project = projectRepository.findById(projectId)
-                .orElseThrow(() -> new IllegalArgumentException("Project not found: " + projectId));
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Project not found: " + projectId));
 
-        // выставляем PAID
-        if (billingStatus != null && !billingStatus.isBlank()) {
-            project.setBillingStatus(billingStatus);
+        // ИЗМЕНЕНО: парсим строку в enum безопасно
+        if (billingStatusStr != null && !billingStatusStr.isBlank()) {
+            try {
+                project.setBillingStatus(BillingStatus.valueOf(billingStatusStr.toUpperCase()));
+            } catch (IllegalArgumentException e) {
+                // Если пришло неизвестное значение — ставим PAID по умолчанию
+                project.setBillingStatus(BillingStatus.PAID);
+            }
         } else {
-            project.setBillingStatus("PAID");
+            project.setBillingStatus(BillingStatus.PAID);
         }
 
-        // увеличиваем quota
         int current = (project.getTaskQuota() != null) ? project.getTaskQuota() : 0;
         project.setTaskQuota(current + Math.max(taskQuotaDelta, 0));
 

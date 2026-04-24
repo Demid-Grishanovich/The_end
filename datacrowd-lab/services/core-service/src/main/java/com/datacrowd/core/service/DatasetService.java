@@ -10,6 +10,7 @@ import com.datacrowd.core.repo.ProjectRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import com.datacrowd.core.entity.BillingStatus;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -89,7 +90,7 @@ public class DatasetService {
         }
 
         // Проверка оплаты/квоты (MVP согласно плану)
-        boolean paid = "PAID".equalsIgnoreCase(String.valueOf(p.getBillingStatus()));
+        boolean paid = p.getBillingStatus() == BillingStatus.PAID;
         boolean hasQuota = p.getTaskQuota() != null && p.getTaskQuota() > 0;
         if (!paid && !hasQuota) {
             throw new IllegalStateException("Project is not paid and has no task quota");

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DataCrowd Lab — My Stats</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav>
+  <a href="worker.html" class="nav-logo">🏷 DataCrowd Lab</a>
+  <div class="nav-r">
+    <span class="chip">Worker</span>
+    <span class="nav-name" id="uname"></span>
+    <a href="worker.html" class="btn btn-g btn-sm">← Tasks</a>
+    <button class="btn btn-g btn-sm" onclick="logout()">Logout</button>
+  </div>
+</nav>
+<div class="wrap-sm">
+  <div class="ph">
+    <div>
+      <div class="ptitle">My Performance</div>
+      <div class="psub">Track your trust score, accuracy and earnings</div>
+    </div>
+    <button class="btn btn-o btn-sm" onclick="load()">↻ Refresh</button>
+  </div>
+
+  <div id="msg" class="hide"></div>
+
+  <!-- Trust Score -->
+  <div class="card tc" style="padding:36px 24px;margin-bottom:14px">
+    <div style="font-size:11px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.08em;margin-bottom:18px">Trust Score</div>
+    <svg width="160" height="160" viewBox="0 0 160 160" style="display:block;margin:0 auto">
+      <circle cx="80" cy="80" r="66" fill="none" stroke="#e5e7eb" stroke-width="12"/>
+      <circle cx="80" cy="80" r="66" fill="none" id="ring"
+        stroke="#6366f1" stroke-width="12" stroke-linecap="round"
+        stroke-dasharray="414.69" stroke-dashoffset="414.69"
+        transform="rotate(-90 80 80)" style="transition:stroke-dashoffset 1s ease,stroke .5s"/>
+    </svg>
+    <div style="margin-top:-88px;margin-bottom:68px;position:relative;z-index:1">
+      <div id="scoreNum" style="font-size:42px;font-weight:700">—</div>
+      <div id="scoreLvl" style="font-size:13px;font-weight:600;margin-top:2px">Loading...</div>
+    </div>
+    <div id="scoreDesc" style="font-size:13px;color:var(--ts);max-width:300px;margin:0 auto"></div>
+  </div>
+
+  <!-- Stats grid -->
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px">
+    <div class="card tc">
+      <div style="font-size:26px;margin-bottom:8px">✅</div>
+      <div id="cTasks" style="font-size:22px;font-weight:700">—</div>
+      <div style="font-size:12px;color:var(--ts);margin-top:3px">Completed</div>
+    </div>
+    <div class="card tc">
+      <div style="font-size:26px;margin-bottom:8px">❌</div>
+      <div id="rTasks" style="font-size:22px;font-weight:700">—</div>
+      <div style="font-size:12px;color:var(--ts);margin-top:3px">Rejected</div>
+    </div>
+    <div class="card tc">
+      <div style="font-size:26px;margin-bottom:8px">🏆</div>
+      <div id="pts" style="font-size:22px;font-weight:700">—</div>
+      <div style="font-size:12px;color:var(--ts);margin-top:3px">Points</div>
+    </div>
+  </div>
+
+  <!-- Accuracy -->
+  <div class="card" style="margin-bottom:14px">
+    <div class="ctitle">Accuracy Rate</div>
+    <div class="cdesc">Ratio of approved tasks to total submitted</div>
+    <div class="prow"><span>Accuracy</span><span id="accPct">—</span></div>
+    <div class="pbar" style="height:10px"><div class="pfill" id="accBar" style="width:0%"></div></div>
+  </div>
+
+  <!-- Trust guide -->
+  <div class="card">
+    <div class="ctitle">Trust Level Guide</div>
+    <div class="cdesc">How your score affects task access</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+      <div style="display:flex;align-items:center;gap:12px;padding:10px;border-radius:var(--rs);background:var(--okl)">
+        <div style="width:10px;height:10px;border-radius:50%;background:#16a34a;flex-shrink:0"></div>
+        <div style="font-size:13px"><b>HIGH (80–100)</b> — Full access, priority assignment</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;padding:10px;border-radius:var(--rs);background:#fefce8">
+        <div style="width:10px;height:10px;border-radius:50%;background:#ca8a04;flex-shrink:0"></div>
+        <div style="font-size:13px"><b>MEDIUM (60–79)</b> — Normal access</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;padding:10px;border-radius:var(--rs);background:#fff7ed">
+        <div style="width:10px;height:10px;border-radius:50%;background:#ea580c;flex-shrink:0"></div>
+        <div style="font-size:13px"><b>LOW (30–59)</b> — Reduced access, focus on quality</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;padding:10px;border-radius:var(--rs);background:var(--errl)">
+        <div style="width:10px;height:10px;border-radius:50%;background:var(--err);flex-shrink:0"></div>
+        <div style="font-size:13px"><b>BLOCKED (0–29)</b> — Account suspended</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tc mt20">
+    <a href="worker.html" class="btn btn-p">← Back to Tasks</a>
+  </div>
+</div>
+
+<script>
+const API='http://localhost:8080/api';
+const tok=localStorage.token;
+if(!tok) location.href='index.html';
+document.getElementById('uname').textContent=localStorage.uname||'';
+function logout(){localStorage.clear();location.href='index.html';}
+
+const COLS={HIGH:'#16a34a',MEDIUM:'#ca8a04',LOW:'#ea580c',BLOCKED:'#ef4444'};
+const DESCS={HIGH:'Excellent work! Full access and priority task assignment.',MEDIUM:'Good performance. Keep submitting quality answers.',LOW:'Score is low. Focus on quality to improve access.',BLOCKED:'Account temporarily suspended. Contact support.'};
+const CIRC=2*Math.PI*66;
+
+async function load(){
+  try{
+    const r=await fetch(`${API}/core/workers/me/stats`,{headers:{'Authorization':'Bearer '+tok}});
+    if(r.status===401){localStorage.clear();location.href='index.html';return;}
+    const s=await r.json();
+    const score=s.trustScore??100;
+    const level=s.trustLevel||'HIGH';
+    const comp=s.completedTasks??0;
+    const rej=s.rejectedTasks??0;
+    const pts=s.totalPoints??0;
+
+    const offset=CIRC-(score/100)*CIRC;
+    const ring=document.getElementById('ring');
+    ring.style.strokeDashoffset=offset;
+    ring.style.stroke=COLS[level]||'#6366f1';
+
+    document.getElementById('scoreNum').textContent=score;
+    document.getElementById('scoreNum').style.color=COLS[level]||'var(--tx)';
+    document.getElementById('scoreLvl').textContent=level;
+    document.getElementById('scoreLvl').style.color=COLS[level]||'var(--ts)';
+    document.getElementById('scoreDesc').textContent=DESCS[level]||'';
+    document.getElementById('cTasks').textContent=comp;
+    document.getElementById('rTasks').textContent=rej;
+    document.getElementById('pts').textContent=pts;
+
+    const total=comp+rej;
+    const acc=total>0?Math.round(comp/total*100):100;
+    document.getElementById('accPct').textContent=acc+'%';
+    document.getElementById('accBar').style.width=acc+'%';
+    document.getElementById('accBar').className='pfill'+(acc>=70?' ok':'');
+  }catch(e){
+    const b=document.getElementById('msg');b.className='alert a-err';b.textContent='⚠ Failed to load stats: '+e.message;
+  }
+}
+load();
+</script>
+</body>
+</html>

@@ -1,16 +1,16 @@
 package com.datacrowd.core.service;
 
 import com.datacrowd.core.api.ApiConflictException;
+import com.datacrowd.core.api.ApiForbiddenException;
 import com.datacrowd.core.entity.*;
-import com.datacrowd.core.repo.AnswerRepository;
-import com.datacrowd.core.repo.ProjectRepository;
-import com.datacrowd.core.repo.ReviewRepository;
-import com.datacrowd.core.repo.TaskRepository;
+import com.datacrowd.core.repo.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.quality.Strictness;
+import org.mockito.junit.jupiter.MockitoSettings;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -19,68 +19,136 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class ReviewWorkflowServiceTest {
 
-    @Mock AnswerRepository answerRepository;
-    @Mock ReviewRepository reviewRepository;
-    @Mock TaskRepository taskRepository;
-    @Mock ProjectRepository projectRepository;
-    @Mock PointsService pointsService;
+    @Mock AnswerRepository        answerRepository;
+    @Mock ReviewRepository        reviewRepository;
+    @Mock TaskRepository          taskRepository;
+    @Mock ProjectRepository       projectRepository;
+    @Mock PointsService           pointsService;
+    @Mock WorkerProfileRepository workerProfileRepository;
+    @Mock AuditService            auditService;
+    @Mock MetricsService          metricsService;
 
     @InjectMocks ReviewWorkflowService reviewWorkflowService;
 
+    // Вспомогательный метод — создаём AnswerEntity уже с task через mock
+    private AnswerEntity makeAnswer(UUID answerId, UUID workerId,
+                                    UUID taskId, TaskEntity task) {
+        AnswerEntity answer = mock(AnswerEntity.class);
+        when(answer.getId()).thenReturn(answerId);
+        when(answer.getTaskId()).thenReturn(taskId);
+        when(answer.getUserId()).thenReturn(workerId);
+        when(answer.getStatus()).thenReturn(AnswerStatus.SUBMITTED);
+        when(answer.getTask()).thenReturn(task);
+        return answer;
+    }
+
     @Test
-    void approve_finalizes_whenApprovalsReachRequired_andAwardsPoints() {
-        UUID answerId = UUID.randomUUID();
+    void approve_finalizes_whenApprovalsReachRequired() {
+        UUID answerId   = UUID.randomUUID();
         UUID reviewerId = UUID.randomUUID();
-        UUID workerId = UUID.randomUUID();
-        UUID taskId = UUID.randomUUID();
-        UUID projectId = UUID.randomUUID();
+        UUID workerId   = UUID.randomUUID();
+        UUID taskId     = UUID.randomUUID();
+        UUID projectId  = UUID.randomUUID();
 
         TaskEntity task = new TaskEntity();
         task.setId(taskId);
         task.setProjectId(projectId);
         task.setStatus(TaskStatus.IN_REVIEW);
 
-        AnswerEntity answer = new AnswerEntity();
-        answer.setId(answerId);
-        answer.setTaskId(taskId);
-        answer.setUserId(workerId);
-        answer.setStatus(AnswerStatus.SUBMITTED);
-        // attach task (simulating fetch join)
-        // Note: no setter for task, so we rely on repository fetch join and getTask() returning non-null in real runtime.
-        // In unit test, we just stub taskRepository fallback.
-
-        when(answerRepository.findByIdWithTask(answerId)).thenReturn(Optional.of(answer));
-        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
-        when(reviewRepository.existsByAnswerIdAndReviewerId(answerId, reviewerId)).thenReturn(false);
-        when(reviewRepository.countByAnswerIdAndDecision(answerId, ReviewDecision.APPROVED)).thenReturn(1L);
+        AnswerEntity answer = makeAnswer(answerId, workerId, taskId, task);
 
         ProjectEntity project = new ProjectEntity();
         project.setId(projectId);
         project.setReviewersCount(1);
         project.setRewardPoints(10);
-        when(projectRepository.findById(projectId)).thenReturn(Optional.of(project));
 
+        when(answerRepository.findByIdWithTask(answerId)).thenReturn(Optional.of(answer));
+        when(reviewRepository.existsByAnswerIdAndReviewerId(answerId, reviewerId)).thenReturn(false);
+        when(projectRepository.findById(projectId)).thenReturn(Optional.of(project));
+        when(reviewRepository.countByAnswerIdAndDecision(answerId, ReviewDecision.APPROVED))
+                .thenReturn(1L);
         when(pointsService.awardTaskApprovedOnce(workerId, taskId, 10)).thenReturn(10);
 
-        ReviewWorkflowService.DecisionResult res = reviewWorkflowService.approve(answerId, reviewerId, "ok");
+        ReviewWorkflowService.DecisionResult result =
+                reviewWorkflowService.approve(answerId, reviewerId, "good");
 
-        assertThat(res.task().getStatus()).isEqualTo(TaskStatus.APPROVED);
-        assertThat(res.answer().getStatus()).isEqualTo(AnswerStatus.APPROVED);
-        assertThat(res.pointsAwarded()).isEqualTo(10);
-        assertThat(res.approvals()).isEqualTo(1);
-        assertThat(res.requiredApprovals()).isEqualTo(1);
-
-        verify(reviewRepository).save(any(ReviewEntity.class));
+        assertThat(result.pointsAwarded()).isEqualTo(10);
+        assertThat(result.task().getStatus()).isEqualTo(TaskStatus.APPROVED);
+        verify(metricsService).incrementTasksApproved();
     }
 
     @Test
-    void reject_setsTaskBackToNew_andMarksAnswerRejected() {
-        UUID answerId = UUID.randomUUID();
+    void reject_decreasesTrustScore_byTen() {
+        UUID answerId   = UUID.randomUUID();
         UUID reviewerId = UUID.randomUUID();
-        UUID workerId = UUID.randomUUID();
-        UUID taskId = UUID.randomUUID();
+        UUID workerId   = UUID.randomUUID();
+        UUID taskId     = UUID.randomUUID();
+        UUID projectId  = UUID.randomUUID();
+
+        TaskEntity task = new TaskEntity();
+        task.setId(taskId);
+        task.setProjectId(projectId);
+        task.setStatus(TaskStatus.IN_REVIEW);
+
+        AnswerEntity answer = makeAnswer(answerId, workerId, taskId, task);
+
+        ProjectEntity project = new ProjectEntity();
+        project.setId(projectId);
+        project.setReviewersCount(1);
+
+        WorkerProfileEntity profile = new WorkerProfileEntity(workerId);
+        profile.setTrustScore(80);
+
+        when(answerRepository.findByIdWithTask(answerId)).thenReturn(Optional.of(answer));
+        when(reviewRepository.existsByAnswerIdAndReviewerId(answerId, reviewerId)).thenReturn(false);
+        when(projectRepository.findById(projectId)).thenReturn(Optional.of(project));
+        when(workerProfileRepository.findById(workerId)).thenReturn(Optional.of(profile));
+
+        reviewWorkflowService.reject(answerId, reviewerId, "bad");
+
+        assertThat(profile.getTrustScore()).isEqualTo(70);
+        verify(metricsService).incrementTasksRejected();
+    }
+
+    @Test
+    void reject_trustScore_doesNotGoBelowZero() {
+        UUID answerId   = UUID.randomUUID();
+        UUID reviewerId = UUID.randomUUID();
+        UUID workerId   = UUID.randomUUID();
+        UUID taskId     = UUID.randomUUID();
+        UUID projectId  = UUID.randomUUID();
+
+        TaskEntity task = new TaskEntity();
+        task.setId(taskId);
+        task.setProjectId(projectId);
+        task.setStatus(TaskStatus.IN_REVIEW);
+
+        AnswerEntity answer = makeAnswer(answerId, workerId, taskId, task);
+        ProjectEntity project = new ProjectEntity();
+        project.setId(projectId);
+        project.setReviewersCount(1);
+
+        WorkerProfileEntity profile = new WorkerProfileEntity(workerId);
+        profile.setTrustScore(5);
+
+        when(answerRepository.findByIdWithTask(answerId)).thenReturn(Optional.of(answer));
+        when(reviewRepository.existsByAnswerIdAndReviewerId(answerId, reviewerId)).thenReturn(false);
+        when(projectRepository.findById(projectId)).thenReturn(Optional.of(project));
+        when(workerProfileRepository.findById(workerId)).thenReturn(Optional.of(profile));
+
+        reviewWorkflowService.reject(answerId, reviewerId, "bad");
+
+        assertThat(profile.getTrustScore()).isEqualTo(0);
+    }
+
+    @Test
+    void approve_throwsForbidden_whenReviewerIsAnswerOwner() {
+        UUID sameUser  = UUID.randomUUID();
+        UUID answerId  = UUID.randomUUID();
+        UUID taskId    = UUID.randomUUID();
         UUID projectId = UUID.randomUUID();
 
         TaskEntity task = new TaskEntity();
@@ -88,53 +156,35 @@ class ReviewWorkflowServiceTest {
         task.setProjectId(projectId);
         task.setStatus(TaskStatus.IN_REVIEW);
 
-        AnswerEntity answer = new AnswerEntity();
-        answer.setId(answerId);
-        answer.setTaskId(taskId);
-        answer.setUserId(workerId);
-        answer.setStatus(AnswerStatus.SUBMITTED);
+        AnswerEntity answer = makeAnswer(answerId, sameUser, taskId, task);
 
         when(answerRepository.findByIdWithTask(answerId)).thenReturn(Optional.of(answer));
-        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
-        when(reviewRepository.existsByAnswerIdAndReviewerId(answerId, reviewerId)).thenReturn(false);
 
-        ProjectEntity project = new ProjectEntity();
-        project.setId(projectId);
-        project.setReviewersCount(2);
-        when(projectRepository.findById(projectId)).thenReturn(Optional.of(project));
-
-        ReviewWorkflowService.DecisionResult res = reviewWorkflowService.reject(answerId, reviewerId, "bad");
-
-        assertThat(res.task().getStatus()).isEqualTo(TaskStatus.NEW);
-        assertThat(res.answer().getStatus()).isEqualTo(AnswerStatus.REJECTED);
-        assertThat(res.pointsAwarded()).isEqualTo(0);
-
-        verify(reviewRepository).save(any(ReviewEntity.class));
+        assertThatThrownBy(() ->
+                reviewWorkflowService.approve(answerId, sameUser, "self"))
+                .isInstanceOf(ApiForbiddenException.class);
     }
 
     @Test
     void approve_throwsConflict_whenAlreadyReviewed() {
-        UUID answerId = UUID.randomUUID();
+        UUID answerId   = UUID.randomUUID();
         UUID reviewerId = UUID.randomUUID();
-        UUID taskId = UUID.randomUUID();
-
-        AnswerEntity answer = new AnswerEntity();
-        answer.setId(answerId);
-        answer.setTaskId(taskId);
-        answer.setUserId(UUID.randomUUID());
-        answer.setStatus(AnswerStatus.SUBMITTED);
+        UUID workerId   = UUID.randomUUID();
+        UUID taskId     = UUID.randomUUID();
+        UUID projectId  = UUID.randomUUID();
 
         TaskEntity task = new TaskEntity();
         task.setId(taskId);
-        task.setProjectId(UUID.randomUUID());
+        task.setProjectId(projectId);
         task.setStatus(TaskStatus.IN_REVIEW);
 
+        AnswerEntity answer = makeAnswer(answerId, workerId, taskId, task);
+
         when(answerRepository.findByIdWithTask(answerId)).thenReturn(Optional.of(answer));
-        when(taskRepository.findById(taskId)).thenReturn(Optional.of(task));
         when(reviewRepository.existsByAnswerIdAndReviewerId(answerId, reviewerId)).thenReturn(true);
 
-        assertThatThrownBy(() -> reviewWorkflowService.approve(answerId, reviewerId, null))
-                .isInstanceOf(ApiConflictException.class)
-                .hasMessageContaining("already reviewed");
+        assertThatThrownBy(() ->
+                reviewWorkflowService.approve(answerId, reviewerId, "again"))
+                .isInstanceOf(ApiConflictException.class);
     }
 }

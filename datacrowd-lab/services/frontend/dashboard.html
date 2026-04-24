@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DataCrowd Lab — Dashboard</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav>
+  <a href="dashboard.html" class="nav-logo">🏷 DataCrowd Lab</a>
+  <div class="nav-r">
+    <span class="chip">Client</span>
+    <span class="nav-name" id="uname"></span>
+    <button class="btn btn-g btn-sm" onclick="logout()">Logout</button>
+  </div>
+</nav>
+<div class="wrap">
+  <div class="ph">
+    <div>
+      <div class="ptitle">DataCrowd Lab</div>
+      <div class="psub">Manage and monitor your crowdsourced data projects</div>
+    </div>
+    <a href="create-project.html" class="btn btn-p">+ Create New Project</a>
+  </div>
+
+  <div id="msg" class="hide"></div>
+
+  <div style="margin-bottom:28px">
+    <div class="sec-hd">
+      <div class="sec-title"><span style="color:var(--p)">⏱</span> Active Projects</div>
+      <span class="sec-cnt" id="aCnt">—</span>
+    </div>
+    <div class="grid3" id="aGrid"><div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--tm)"><span class="spin spin-d"></span><p style="margin-top:10px">Loading...</p></div></div>
+  </div>
+
+  <div>
+    <div class="sec-hd">
+      <div class="sec-title"><span style="color:var(--ok)">✓</span> Completed Projects</div>
+      <span class="sec-cnt" id="cCnt">—</span>
+    </div>
+    <div class="grid3" id="cGrid"><div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--tm)">No completed projects yet.</div></div>
+  </div>
+</div>
+
+<script>
+const API='http://localhost:8080/api';
+const tok=localStorage.token;
+if(!tok) location.href='index.html';
+document.getElementById('uname').textContent=localStorage.uname||'';
+function logout(){localStorage.clear();location.href='index.html';}
+const H=()=>({'Authorization':'Bearer '+tok,'Content-Type':'application/json'});
+const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+
+function card(p){
+  const prog=p.progress||0;
+  const done=p.completedTasks||0;
+  const total=p.totalTasks||0;
+  const paid=p.billingStatus==='PAID';
+  const comp=prog>=100||p.status==='COMPLETED';
+  return `<div class="pcard" onclick="location.href='project-detail.html?id=${p.id}'">
+    <div class="pcard-hd">
+      <div class="pcard-name">${esc(p.name)}</div>
+      <span class="badge ${comp?'b-done':paid?'b-active':'b-unpaid'}">${comp?'Completed':paid?'Active':'Unpaid'}</span>
+    </div>
+    <div class="pcard-sub">${esc(p.dataType||'TEXT')} · ${p.reviewersCount||1} reviewer(s)</div>
+    <div class="prow"><span>Progress</span><span>${prog}%</span></div>
+    <div class="pbar"><div class="pfill ${comp?'ok':''}" style="width:${prog}%"></div></div>
+    <div class="srow">
+      <div class="sbox"><div class="slbl">Tasks Done</div><div class="sval">${done}/${total}</div></div>
+      <div class="sbox"><div class="slbl">Billing</div><div class="sval" style="font-size:13px;font-weight:600;color:${paid?'var(--ok)':'var(--err)'}">${paid?'PAID':'UNPAID'}</div></div>
+    </div>
+    ${!paid?`<button class="btn btn-p btn-sm" style="width:100%;margin-top:12px;justify-content:center" onclick="event.stopPropagation();pay('${p.id}')">Pay & Activate</button>`:''}
+    ${paid&&!comp?`<button class="btn btn-o btn-sm" style="width:100%;margin-top:12px;justify-content:center" onclick="event.stopPropagation();location.href='project-detail.html?id=${p.id}'">Continue →</button>`:''}
+  </div>`;
+}
+
+async function pay(id){
+  try{
+    const r=await fetch(`${API}/payments/checkout`,{method:'POST',headers:H(),body:JSON.stringify({projectId:id})});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.message);
+    window.open(d.checkoutUrl,'_blank');
+  }catch(e){alert('Payment error: '+e.message);}
+}
+
+async function load(){
+  try{
+    const r=await fetch(`${API}/core/projects`,{headers:H()});
+    if(r.status===401){logout();return;}
+    const d=await r.json();
+    const all=Array.isArray(d)?d:(d.content||[]);
+    const active=all.filter(p=>p.status!=='COMPLETED'&&(p.progress||0)<100);
+    const comp=all.filter(p=>p.status==='COMPLETED'||(p.progress||0)>=100);
+    document.getElementById('aCnt').textContent=active.length+' project'+(active.length!==1?'s':'');
+    document.getElementById('cCnt').textContent=comp.length+' project'+(comp.length!==1?'s':'');
+    document.getElementById('aGrid').innerHTML=active.length?active.map(card).join(''):'<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--tm)">No active projects. <a href="create-project.html" style="color:var(--p)">Create one →</a></div>';
+    document.getElementById('cGrid').innerHTML=comp.length?comp.map(card).join(''):'<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--tm)">No completed projects yet.</div>';
+  }catch(e){
+    document.getElementById('aGrid').innerHTML=`<div style="grid-column:1/-1" class="alert a-err">Failed to load: ${e.message}</div>`;
+  }
+}
+load();
+</script>
+</body>
+</html>

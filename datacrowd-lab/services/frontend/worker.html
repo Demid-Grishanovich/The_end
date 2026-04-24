@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DataCrowd Lab — Worker</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav>
+  <a href="worker.html" class="nav-logo">🏷 DataCrowd Lab</a>
+  <div class="nav-r">
+    <span class="chip">Worker</span>
+    <span class="nav-name" id="uname"></span>
+    <a href="stats.html" class="btn btn-o btn-sm">📊 My Stats</a>
+    <button class="btn btn-g btn-sm" onclick="logout()">Logout</button>
+  </div>
+</nav>
+<div class="wrap-sm">
+  <div class="ph">
+    <div>
+      <div class="ptitle">Task Queue</div>
+      <div class="psub">Pick up tasks and label them to earn points</div>
+    </div>
+  </div>
+
+  <div id="msg" class="hide"></div>
+
+  <!-- Empty state -->
+  <div id="empty" class="card tc" style="padding:60px 40px">
+    <div style="font-size:48px;margin-bottom:14px">📋</div>
+    <div style="font-size:18px;font-weight:600;margin-bottom:8px">No active task</div>
+    <div style="font-size:14px;color:var(--ts);margin-bottom:22px">Pick up a new task from the queue to start earning points</div>
+    <button class="btn btn-p" id="getBtn" onclick="getTask()">Get Next Task</button>
+  </div>
+
+  <!-- Task section -->
+  <div id="taskSec" class="hide">
+    <!-- Timer header -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--p);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Active Task</div>
+          <div style="font-size:12px;color:var(--ts)">ID: <span id="tidDisp" style="font-family:monospace"></span></div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:11px;color:var(--ts);margin-bottom:2px">Time spent</div>
+          <div id="timer" style="font-size:22px;font-weight:700;color:var(--p);font-variant-numeric:tabular-nums">0:00</div>
+        </div>
+      </div>
+      <div class="pbar"><div class="pfill" id="timerBar" style="width:0%;transition:width 1s linear"></div></div>
+      <div style="font-size:11px;color:var(--tm);margin-top:4px">Minimum time required before submitting</div>
+    </div>
+
+    <!-- Content -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Content to Label</div>
+      <div class="task-content" id="taskContent">—</div>
+    </div>
+
+    <!-- Labels -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="font-size:15px;font-weight:600;margin-bottom:3px">Select Label</div>
+      <div style="font-size:13px;color:var(--ts);margin-bottom:14px">Choose the most appropriate label for the content above</div>
+      <div class="labels" id="labelOpts"></div>
+      <div id="selInfo" class="hide" style="margin-top:12px;padding:10px 14px;background:var(--pl);border-radius:var(--rs);font-size:13px;font-weight:500;color:var(--p)">
+        Selected: <span id="selVal"></span>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-o" style="flex:1" onclick="skip()">Skip Task</button>
+      <button id="subBtn" class="btn btn-p" style="flex:2;justify-content:center" disabled onclick="submit()">Submit Answer</button>
+    </div>
+  </div>
+
+  <!-- Done state -->
+  <div id="doneState" class="hide card tc" style="padding:44px">
+    <div style="font-size:48px;margin-bottom:12px">🎉</div>
+    <div style="font-size:18px;font-weight:600;margin-bottom:8px">Task Submitted!</div>
+    <div style="font-size:14px;color:var(--ts);margin-bottom:20px" id="ptsMsg"></div>
+    <button class="btn btn-p" onclick="nextTask()">Next Task →</button>
+  </div>
+</div>
+
+<script>
+const API='http://localhost:8080/api';
+const tok=localStorage.token;
+if(!tok) location.href='index.html';
+document.getElementById('uname').textContent=localStorage.uname||'';
+function logout(){localStorage.clear();location.href='index.html';}
+
+let task=null,chosen=null,lockTime=null,timerIv=null;
+const show=id=>document.getElementById(id).classList.remove('hide');
+const hide=id=>document.getElementById(id).classList.add('hide');
+
+const LABELS={
+  TEXT:[['positive','👍 Positive'],['negative','👎 Negative'],['neutral','😐 Neutral'],['mixed','🔀 Mixed']],
+  IMAGE:[['yes','✅ Yes'],['no','❌ No'],['unclear','❓ Unclear'],['damaged','⚠ Damaged']],
+  CODE:[['correct','✅ Correct'],['incorrect','❌ Incorrect'],['partial','⚠ Partial']],
+  MATH:[['correct','✅ Correct'],['incorrect','❌ Incorrect'],['undefined','❓ Undefined']],
+  AUDIO:[['clear','🔊 Clear'],['noisy','🔇 Noisy'],['silent','🔕 Silent']],
+};
+
+function renderLabels(dtype){
+  const opts=LABELS[dtype]||LABELS.TEXT;
+  document.getElementById('labelOpts').innerHTML=opts.map(
+    ([v,t])=>`<button class="lbtn" onclick="pick('${v}',this)">${t}</button>`
+  ).join('');
+  chosen=null;
+  hide('selInfo');
+  document.getElementById('subBtn').disabled=true;
+}
+
+function pick(v,btn){
+  chosen=v;
+  document.querySelectorAll('.lbtn').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+  document.getElementById('selVal').textContent=v;
+  show('selInfo');
+  document.getElementById('subBtn').disabled=false;
+}
+
+function startTimer(){
+  lockTime=Date.now();
+  clearInterval(timerIv);
+  timerIv=setInterval(()=>{
+    const s=Math.floor((Date.now()-lockTime)/1000);
+    const m=Math.floor(s/60);
+    document.getElementById('timer').textContent=m+':'+(s%60+'').padStart(2,'0');
+    document.getElementById('timerBar').style.width=Math.min(s/30*100,100)+'%';
+  },1000);
+}
+
+async function getTask(){
+  const btn=document.getElementById('getBtn');
+  btn.disabled=true;btn.innerHTML='<span class="spin"></span> Loading...';
+  try{
+    const r=await fetch(`${API}/core/tasks/next`,{headers:{'Authorization':'Bearer '+tok}});
+    if(r.status===404||r.status===204){showMsg('info','No tasks available right now. Check back soon!');btn.disabled=false;btn.textContent='Get Next Task';return;}
+    if(r.status===403){showMsg('err','Your trust score is too low to receive tasks.');btn.disabled=false;btn.textContent='Get Next Task';return;}
+    task=await r.json();
+    await fetch(`${API}/core/tasks/${task.id}/lock`,{method:'POST',headers:{'Authorization':'Bearer '+tok}});
+    renderTask(task);
+  }catch(e){showMsg('err','Failed: '+e.message);btn.disabled=false;btn.textContent='Get Next Task';}
+}
+
+function renderTask(t){
+  hide('empty');hide('doneState');show('taskSec');
+  chosen=null;
+  document.getElementById('tidDisp').textContent=t.id.substring(0,8)+'...';
+  let content='No content',dtype='TEXT';
+  try{
+    const p=JSON.parse(t.payloadJson||'{}');
+    dtype=(p.type||p.format||'TEXT').toUpperCase();
+    content=p.text||p.content||p.filePath||JSON.stringify(p,null,2);
+  }catch(e){}
+  document.getElementById('taskContent').textContent=content;
+  renderLabels(dtype);
+  startTimer();
+}
+
+async function submit(){
+  if(!chosen||!task) return;
+  const btn=document.getElementById('subBtn');
+  btn.disabled=true;btn.innerHTML='<span class="spin"></span> Submitting...';
+  try{
+    const r=await fetch(`${API}/core/tasks/${task.id}/submit`,{
+      method:'POST',headers:{'Authorization':'Bearer '+tok,'Content-Type':'application/json'},
+      body:JSON.stringify({answer:JSON.stringify({label:chosen})})
+    });
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.detail||d.message||'Submit failed');
+    clearInterval(timerIv);
+    hide('taskSec');show('doneState');
+    const pts=d.pointsAwarded||0;
+    document.getElementById('ptsMsg').textContent=pts>0?`+${pts} points earned! Keep it up!`:'Answer submitted for review. Points awarded after approval.';
+    task=null;
+  }catch(e){showMsg('err',e.message);btn.disabled=false;btn.textContent='Submit Answer';}
+}
+
+async function skip(){
+  if(task) try{await fetch(`${API}/core/tasks/${task.id}/unlock`,{method:'POST',headers:{'Authorization':'Bearer '+tok}});}catch(e){}
+  clearInterval(timerIv);task=null;
+  hide('taskSec');show('empty');
+  document.getElementById('getBtn').disabled=false;
+  document.getElementById('getBtn').textContent='Get Next Task';
+}
+
+function nextTask(){hide('doneState');show('empty');document.getElementById('getBtn').disabled=false;document.getElementById('getBtn').textContent='Get Next Task';getTask();}
+
+function showMsg(type,msg){const b=document.getElementById('msg');b.className='alert '+(type==='err'?'a-err':type==='ok'?'a-ok':'a-info');b.textContent=(type==='err'?'⚠ ':'ℹ ')+msg;}
+</script>
+</body>
+</html>

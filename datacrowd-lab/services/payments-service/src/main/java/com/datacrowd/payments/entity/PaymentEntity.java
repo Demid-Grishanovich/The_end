@@ -15,7 +15,7 @@ public class PaymentEntity {
     @GeneratedValue
     private UUID id;
 
-    @Column(name = "user_id")
+    @Column(name = "user_id", nullable = false)
     private UUID userId;
 
     @Column(name = "project_id", nullable = false)
@@ -24,34 +24,35 @@ public class PaymentEntity {
     @Column(name = "amount_cents", nullable = false)
     private Integer amountCents;
 
-    @Column(nullable = false, length = 3)
+    @Column(name = "currency", nullable = false, length = 10)
     private String currency;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 20)
     private PaymentStatus status;
 
-    @Column(name = "stripe_session_id")
+    @Column(name = "stripe_session_id", length = 500)
     private String stripeSessionId;
 
-    @Column(name = "stripe_payment_intent_id")
+    @Column(name = "stripe_payment_intent_id", length = 500)
     private String stripePaymentIntentId;
 
-    /**
-     * В таблице добавим колонку task_quota (миграция V5 ниже).
-     */
-    @Column(name = "task_quota", nullable = false)
-    private Integer taskQuota = 0;
+    @Column(name = "task_quota")
+    private Integer taskQuota;
 
+    // ИСПРАВЛЕНО: добавляем аннотации для автозаполнения
     @CreationTimestamp
-    @Column(name = "created_at", nullable = false)
+    @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
     @UpdateTimestamp
     @Column(name = "updated_at")
     private Instant updatedAt;
 
+    // getters / setters
+
     public UUID getId() { return id; }
+    public void setId(UUID id) { this.id = id; }
 
     public UUID getUserId() { return userId; }
     public void setUserId(UUID userId) { this.userId = userId; }
@@ -72,11 +73,12 @@ public class PaymentEntity {
     public void setStripeSessionId(String stripeSessionId) { this.stripeSessionId = stripeSessionId; }
 
     public String getStripePaymentIntentId() { return stripePaymentIntentId; }
-    public void setStripePaymentIntentId(String stripePaymentIntentId) { this.stripePaymentIntentId = stripePaymentIntentId; }
+    public void setStripePaymentIntentId(String id) { this.stripePaymentIntentId = id; }
 
     public Integer getTaskQuota() { return taskQuota; }
     public void setTaskQuota(Integer taskQuota) { this.taskQuota = taskQuota; }
 
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
 }

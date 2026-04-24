@@ -141,35 +141,68 @@ public class PaymentService {
         if (event == null) return;
 
         if (!"checkout.session.completed".equals(event.getType())) {
-            return; // MVP: обрабатываем только успешное завершение checkout
+            return;
         }
 
-        Session session = (Session) event.getDataObjectDeserializer()
-                .getObject()
-                .orElse(null);
+        // ИСПРАВЛЕНО: используем rawJson вместо getObject()
+        // В новых версиях Stripe SDK getObject() может возвращать empty
+        String rawJson = event.getDataObjectDeserializer().getRawJson();
+        if (rawJson == null || rawJson.isBlank()) {
+            return;
+        }
 
-        if (session == null) return;
+        String sessionId;
+        UUID projectId;
+        int taskQuota;
 
-        String sessionId = session.getId();
+        try {
+            // Парсим вручную из rawJson
+            com.fasterxml.jackson.databind.ObjectMapper mapper =
+                    new com.fasterxml.jackson.databind.ObjectMapper();
+            com.fasterxml.jackson.databind.JsonNode node = mapper.readTree(rawJson);
 
+            sessionId = node.path("id").asText(null);
+
+            // Сначала пробуем взять projectId из metadata
+            com.fasterxml.jackson.databind.JsonNode metadata = node.path("metadata");
+            String projectIdStr = metadata.path("projectId").asText(null);
+            String taskQuotaStr = metadata.path("taskQuota").asText(null);
+
+            if (projectIdStr == null || projectIdStr.isBlank()) {
+                // Fallback: ищем через payment record по sessionId
+                projectIdStr = null;
+            }
+
+            projectId = (projectIdStr != null) ? UUID.fromString(projectIdStr) : null;
+            taskQuota  = (taskQuotaStr != null && !taskQuotaStr.isBlank())
+                    ? Integer.parseInt(taskQuotaStr)
+                    : defaultTaskQuota;
+
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to parse Stripe session JSON: " + e.getMessage(), e);
+        }
+
+        if (sessionId == null) return;
+
+        // Находим payment по sessionId
         PaymentEntity payment = paymentRepository.findByStripeSessionId(sessionId)
-                .orElseThrow(() -> new IllegalArgumentException("Payment not found for stripe_session_id=" + sessionId));
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Payment not found for stripe_session_id=" + sessionId));
 
-        // Идемпотентность: если уже SUCCEEDED — ничего не делаем
+        // Идемпотентность
         if (payment.getStatus() == PaymentStatus.SUCCEEDED) {
             return;
         }
 
         payment.setStatus(PaymentStatus.SUCCEEDED);
-
-        if (session.getPaymentIntent() != null) {
-            payment.setStripePaymentIntentId(session.getPaymentIntent());
-        }
-
         paymentRepository.save(payment);
 
-        // Главное действие блока 8: выдать доступ в core-service (billing_status=PAID + quota)
-        coreBillingClient.grantPaidAccess(payment.getProjectId(), payment.getTaskQuota());
+        // Используем projectId из payment если в metadata не было
+        UUID finalProjectId = (projectId != null) ? projectId : payment.getProjectId();
+        int  finalQuota     = (payment.getTaskQuota() != null) ? payment.getTaskQuota() : taskQuota;
+
+        // Вызываем core-service — меняем billingStatus на PAID
+        coreBillingClient.grantPaidAccess(finalProjectId, finalQuota);
     }
 
     @Transactional

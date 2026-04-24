@@ -26,10 +26,12 @@ class AuthRepositoryIT {
 
     @DynamicPropertySource
     static void props(DynamicPropertyRegistry r) {
-        r.add("spring.datasource.url", postgres::getJdbcUrl);
+        r.add("spring.datasource.url",      postgres::getJdbcUrl);
         r.add("spring.datasource.username", postgres::getUsername);
         r.add("spring.datasource.password", postgres::getPassword);
-        r.add("spring.flyway.enabled", () -> "true");
+        r.add("spring.flyway.enabled",      () -> "true");
+        // ИСПРАВЛЕНО: JWT_SECRET требуется при старте Spring контекста
+        r.add("app.jwt.secret", () -> "test-secret-key-minimum-32-characters-long!");
     }
 
     @Autowired
@@ -42,6 +44,6 @@ class AuthRepositoryIT {
                 Integer.class
         );
         assertNotNull(cnt);
-        assertTrue(cnt > 0, "users table should exist after Flyway миграций");
+        assertTrue(cnt > 0, "users table should exist after Flyway migrations");
     }
 }

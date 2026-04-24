@@ -16,32 +16,36 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
-    private final InternalTokenFilter internalTokenFilter;
+    private final InternalTokenFilter     internalTokenFilter;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter, InternalTokenFilter internalTokenFilter) {
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
+                          InternalTokenFilter internalTokenFilter) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
-        this.internalTokenFilter = internalTokenFilter;
+        this.internalTokenFilter     = internalTokenFilter;
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
-                .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .sessionManagement(sess ->
+                        sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // 1. ВАЖНО: Swagger правила САМЫМИ ПЕРВЫМИ
+                        // Swagger
                         .requestMatchers(
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html",
                                 "/webjars/**"
                         ).permitAll()
-                        // 2. Внутренние вызовы
+                        // НОВОЕ: Prometheus метрики — открываем для Prometheus сервера
+                        .requestMatchers("/actuator/prometheus", "/actuator/health").permitAll()
+                        // Internal API
                         .requestMatchers("/internal/**").permitAll()
-                        // 3. ФИНАЛЬНОЕ правило - в самом конце
+                        // Всё остальное требует JWT
                         .anyRequest().authenticated()
                 )
-                .addFilterBefore(internalTokenFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(internalTokenFilter,     UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }

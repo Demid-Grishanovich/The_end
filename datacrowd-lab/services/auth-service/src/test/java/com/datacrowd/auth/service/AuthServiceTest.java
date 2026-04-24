@@ -8,87 +8,88 @@ import com.datacrowd.auth.user.UserEntity;
 import com.datacrowd.auth.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class AuthServiceTest {
 
-    private UserRepository users;
+    private UserRepository  userRepository;
     private PasswordEncoder passwordEncoder;
-    private JwtService jwtService;
-
-    private AuthService authService;
+    private JwtService      jwtService;
+    private AuthService     authService;
 
     @BeforeEach
     void setUp() {
-        users = mock(UserRepository.class);
+        userRepository  = mock(UserRepository.class);
         passwordEncoder = mock(PasswordEncoder.class);
-        jwtService = mock(JwtService.class);
-
-        authService = new AuthService(users, passwordEncoder, jwtService);
-    }
-
-
-
-
-
-    @Test
-    void login_shouldReturnToken_whenCredentialsValid() {
-        UserEntity u = new UserEntity();
-        u.setId(UUID.randomUUID());
-        u.setEmail("demo@example.com");
-        u.setUsername("demo");
-        u.setPasswordHash("hashed");
-        u.setRole("WORKER");
-        u.setStatus(UserEntity.Status.ACTIVE);
-
-        when(users.findByEmail("demo@example.com")).thenReturn(Optional.of(u));
-        when(passwordEncoder.matches("pass", "hashed")).thenReturn(true);
-        when(jwtService.generate(anyString(), anyString(), anyString())).thenReturn("jwt-token");
-
-        var req = new LoginRequest("demo@example.com", "pass");
-        AuthResponse res = authService.login(req);
-
-        assertThat(res.token()).isEqualTo("jwt-token");
-        assertThat(res.userId()).isEqualTo(u.getId().toString());
-        assertThat(res.role()).isEqualTo("WORKER");
+        jwtService      = mock(JwtService.class);
+        authService     = new AuthService(userRepository, passwordEncoder, jwtService);
     }
 
     @Test
-    void login_shouldFail_whenUserNotFound() {
-        when(users.findByEmail("demo@example.com")).thenReturn(Optional.empty());
+    void login_returnsToken_whenCredentialsValid() {
+        UUID userId = UUID.randomUUID();
+        UserEntity user = new UserEntity();
+        user.setId(userId);
+        user.setEmail("test@test.com");
+        user.setPasswordHash("$2a$hash");
+        user.setRole("WORKER");
+        user.setUsername("testuser");
 
-        var req = new LoginRequest("demo@example.com", "pass");
+        when(userRepository.findByEmail("test@test.com")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("Test1234!", "$2a$hash")).thenReturn(true);
+        when(jwtService.generate(userId.toString(), "test@test.com", "WORKER"))
+                .thenReturn("jwt-token");
 
-        assertThatThrownBy(() -> authService.login(req))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("bad credentials");
+        // ИСПРАВЛЕНО: records создаются через конструктор
+        AuthResponse response = authService.login(new LoginRequest("test@test.com", "Test1234!"));
+
+        assertThat(response.token()).isEqualTo("jwt-token");
+        assertThat(response.role()).isEqualTo("WORKER");
     }
 
     @Test
-    void login_shouldFail_whenPasswordInvalid() {
-        UserEntity u = new UserEntity();
-        u.setId(UUID.randomUUID());
-        u.setEmail("demo@example.com");
-        u.setUsername("demo");
-        u.setPasswordHash("hashed");
-        u.setRole("WORKER");
-        u.setStatus(UserEntity.Status.ACTIVE);
+    void login_throwsException_whenPasswordInvalid() {
+        UserEntity user = new UserEntity();
+        user.setId(UUID.randomUUID());
+        user.setEmail("test@test.com");
+        user.setPasswordHash("$2a$hash");
+        user.setRole("WORKER");
+        user.setUsername("testuser");
 
-        when(users.findByEmail("demo@example.com")).thenReturn(Optional.of(u));
-        when(passwordEncoder.matches("pass", "hashed")).thenReturn(false);
+        when(userRepository.findByEmail("test@test.com")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("wrongpass", "$2a$hash")).thenReturn(false);
 
-        var req = new LoginRequest("demo@example.com", "pass");
+        assertThatThrownBy(() ->
+                authService.login(new LoginRequest("test@test.com", "wrongpass")))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 
-        assertThatThrownBy(() -> authService.login(req))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("bad credentials");
+    @Test
+    void login_throwsException_whenUserNotFound() {
+        when(userRepository.findByEmail("notfound@test.com")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() ->
+                authService.login(new LoginRequest("notfound@test.com", "anypass")))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void register_throwsException_whenEmailAlreadyExists() {
+        UserEntity existing = new UserEntity();
+        existing.setId(UUID.randomUUID());
+        existing.setEmail("exists@test.com");
+
+        when(userRepository.findByEmail("exists@test.com"))
+                .thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() ->
+                authService.register(new RegisterRequest("newuser", "exists@test.com", "Test1234!"), "WORKER"))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

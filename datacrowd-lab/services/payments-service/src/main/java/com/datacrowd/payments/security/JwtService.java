@@ -16,10 +16,12 @@ public class JwtService {
 
     public JwtService(@Value("${app.jwt.secret}") String secret) {
         if (secret == null || secret.isBlank()) {
-            throw new IllegalStateException("JWT_SECRET env var is not set. Set it in .env / docker-compose / IDE env.");
+            throw new IllegalStateException(
+                    "JWT_SECRET env var is not set. Set it in .env / docker-compose.");
         }
         if (secret.length() < 32) {
-            throw new IllegalStateException("JWT_SECRET is too short. Use at least 32 characters for HS256.");
+            throw new IllegalStateException(
+                    "JWT_SECRET is too short. Use at least 32 characters for HS256.");
         }
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }

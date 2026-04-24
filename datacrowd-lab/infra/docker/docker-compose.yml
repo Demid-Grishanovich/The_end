@@ -144,6 +144,8 @@ services:
     env_file:
       - .env
 
+
+
   runner:
     build:
       context: ../../services/runner
@@ -163,10 +165,76 @@ services:
       # shared storage with core-service (datasets live here)
       - core_data:/data
 
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - datacrowd-net
+    restart: unless-stopped
+    depends_on:
+      - core-service
+      - auth-service
+      - payments-service
+
+  grafana:
+      image: grafana/grafana:10.2.0
+      ports:
+        - "3000:3000"
+      environment:
+        GF_SECURITY_ADMIN_USER: admin
+        GF_SECURITY_ADMIN_PASSWORD: admin
+        GF_USERS_ALLOW_SIGN_UP: "false"
+      volumes:
+        - grafana_data:/var/lib/grafana
+        - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      networks:
+        - datacrowd-net
+      restart: unless-stopped
+      depends_on:
+        - prometheus
+
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - datacrowd-net
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ../../services/frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - api-gateway
+    networks:
+      - datacrowd-network
+
 networks:
   datacrowd-net:
+    driver: bridge
+  datacrowd-network:
     driver: bridge
 
 volumes:
   core_data:
   datacrowd_pgdata:
+  grafana_data:
+  minio_data:
+

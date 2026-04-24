@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DataCrowd Lab — Payment</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav>
+  <a href="dashboard.html" class="nav-logo">🏷 DataCrowd Lab</a>
+  <div class="nav-r">
+    <span class="chip">Client</span>
+    <span class="nav-name" id="uname"></span>
+    <button class="btn btn-g btn-sm" onclick="logout()">Logout</button>
+  </div>
+</nav>
+<div class="wrap-sm">
+
+  <div style="text-align:center;margin-bottom:28px">
+    <div style="font-size:44px;margin-bottom:10px">💳</div>
+    <div class="ptitle">Activate Your Project</div>
+    <div class="psub">Complete payment to start collecting labeled data</div>
+  </div>
+
+  <div id="msg" class="hide"></div>
+
+  <!-- Project summary -->
+  <div class="card" style="margin-bottom:14px" id="projCard">
+    <div style="text-align:center;padding:20px;color:var(--tm)">
+      <span class="spin spin-d"></span><p style="margin-top:8px">Loading project...</p>
+    </div>
+  </div>
+
+  <!-- Pricing -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="ctitle">Pricing</div>
+    <div class="cdesc">One-time payment to unlock task generation</div>
+    <div style="border-top:1px solid var(--bd);padding-top:14px">
+      <div class="row-sb" style="padding:10px 0;border-bottom:1px solid var(--bd)">
+        <span>Task quota (100 tasks)</span><span style="font-weight:600">€5.00</span>
+      </div>
+      <div class="row-sb" style="padding:10px 0;border-bottom:1px solid var(--bd)">
+        <span>Processing fee</span><span style="font-weight:600">€0.00</span>
+      </div>
+      <div class="row-sb" style="padding:14px 0">
+        <span style="font-size:16px;font-weight:700">Total</span>
+        <span style="font-size:22px;font-weight:700;color:var(--p)">€5.00</span>
+      </div>
+    </div>
+    <div class="alert a-info" style="margin-top:4px">
+      🔒 Secure payment via Stripe · Test card: <b>4242 4242 4242 4242</b>
+    </div>
+  </div>
+
+  <button id="payBtn" class="btn btn-p btn-full" onclick="pay()">💳 Pay with Stripe</button>
+
+  <div id="paidBox" class="hide" style="margin-top:14px">
+    <div class="alert a-ok tc">✅ Project is already paid and active!</div>
+    <a href="dashboard.html" class="btn btn-p btn-full mt8">Go to Dashboard →</a>
+  </div>
+
+  <div class="tc mt14">
+    <a href="dashboard.html" class="alink" style="font-size:13px">← Back to Dashboard</a>
+  </div>
+</div>
+
+<script>
+const API='http://localhost:8080/api';
+const tok=localStorage.token;
+if(!tok) location.href='index.html';
+document.getElementById('uname').textContent=localStorage.uname||'';
+function logout(){localStorage.clear();location.href='index.html';}
+
+const id=new URLSearchParams(location.search).get('id');
+if(!id) location.href='dashboard.html';
+
+async function loadProject(){
+  try{
+    const r=await fetch(`${API}/core/projects/${id}`,{headers:{'Authorization':'Bearer '+tok}});
+    const p=await r.json();
+    const paid=p.billingStatus==='PAID';
+    document.getElementById('projCard').innerHTML=`
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:16px;font-weight:700">${p.name}</div>
+          <div style="font-size:13px;color:var(--ts);margin-top:3px">${p.dataType} · ${p.reviewersCount} reviewer(s) · ${p.rewardPoints} pts/task</div>
+        </div>
+        <span class="badge ${paid?'b-paid':'b-unpaid'}">${paid?'PAID':'UNPAID'}</span>
+      </div>`;
+    if(paid){
+      document.getElementById('payBtn').classList.add('hide');
+      document.getElementById('paidBox').classList.remove('hide');
+    }
+  }catch(e){
+    document.getElementById('projCard').innerHTML=`<div class="alert a-err">Failed to load project</div>`;
+  }
+}
+
+async function pay(){
+  const btn=document.getElementById('payBtn');
+  btn.disabled=true;btn.innerHTML='<span class="spin"></span> Redirecting to Stripe...';
+  try{
+    const r=await fetch(`${API}/payments/checkout`,{method:'POST',headers:{'Authorization':'Bearer '+tok,'Content-Type':'application/json'},body:JSON.stringify({projectId:id})});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.message||'Payment error');
+    location.href=d.checkoutUrl;
+  }catch(e){
+    const b=document.getElementById('msg');b.className='alert a-err';b.textContent='⚠ '+e.message;
+    btn.disabled=false;btn.textContent='💳 Pay with Stripe';
+  }
+}
+
+loadProject();
+if(new URLSearchParams(location.search).get('success')){
+  const b=document.getElementById('msg');b.className='alert a-ok';b.textContent='✅ Payment successful! Project is now active.';
+}
+</script>
+</body>
+</html>

@@ -4,6 +4,7 @@ import com.datacrowd.core.dto.SubmitTaskRequest;
 import com.datacrowd.core.dto.SubmitTaskResponse;
 import com.datacrowd.core.dto.TaskResponse;
 import com.datacrowd.core.entity.TaskEntity;
+import com.datacrowd.core.repo.TaskRepository;
 import com.datacrowd.core.security.AuthContext;
 import com.datacrowd.core.service.WorkerTaskService;
 import jakarta.validation.Valid;
@@ -25,9 +26,20 @@ import java.util.UUID;
 public class TasksController {
 
     private final WorkerTaskService workerTaskService;
+    private final TaskRepository    taskRepository;
 
-    public TasksController(WorkerTaskService workerTaskService) {
+    public TasksController(WorkerTaskService workerTaskService,
+                           TaskRepository taskRepository) {
         this.workerTaskService = workerTaskService;
+        this.taskRepository    = taskRepository;
+    }
+
+    // НОВОЕ: получить задачу по ID
+    @GetMapping("/{id}")
+    public ResponseEntity<TaskResponse> getById(@PathVariable UUID id) {
+        return taskRepository.findById(id)
+                .map(t -> ResponseEntity.ok(toResponse(t)))
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @GetMapping("/next")
@@ -53,29 +65,28 @@ public class TasksController {
     }
 
     @PostMapping("/{id}/submit")
-    public SubmitTaskResponse submit(@PathVariable UUID id, @Valid @RequestBody SubmitTaskRequest req) {
+    public SubmitTaskResponse submit(
+            @PathVariable UUID id,
+            @Valid @RequestBody SubmitTaskRequest req) {
+
         UUID userId = AuthContext.getUserIdOrThrow();
         WorkerTaskService.SubmitResult res = workerTaskService.submit(id, userId, req.answerJson);
 
         SubmitTaskResponse out = new SubmitTaskResponse();
-        out.taskId = res.task().getId();
-        out.answerId = res.answer().getId();
-        out.taskStatus = res.task().getStatus().name();
+        out.taskId       = res.task().getId();
+        out.answerId     = res.answer().getId();
+        out.taskStatus   = res.task().getStatus().name();
         out.pointsAwarded = res.pointsAwarded();
         return out;
     }
 
-    /**
-     * Streams an asset referenced by the task payload (for front-end usage).
-     *
-     * Important: In Postman it may look like a "download", but in a browser the same URL can be used
-     * directly in <img src="..."> or <audio src="..."> and will render/play inline because we set
-     * Content-Type and Content-Disposition: inline.
-     */
     @GetMapping("/{id}/asset")
-    public ResponseEntity<?> getAsset(@PathVariable UUID id, @RequestHeader HttpHeaders headers) {
+    public ResponseEntity<?> getAsset(
+            @PathVariable UUID id,
+            @RequestHeader HttpHeaders headers) {
+
         UUID userId = AuthContext.getUserIdOrThrow();
-        Path file = workerTaskService.resolveTaskAssetPath(id, userId);
+        Path file   = workerTaskService.resolveTaskAssetPath(id, userId);
 
         String contentType;
         try {
@@ -89,7 +100,7 @@ public class TasksController {
 
         Resource resource = new FileSystemResource(file);
 
-        // Support HTTP Range for audio/video seeking.
+        // Поддержка Range запросов для аудио/видео
         var ranges = headers.getRange();
         if (ranges != null && !ranges.isEmpty()) {
             long contentLength;
@@ -99,10 +110,10 @@ public class TasksController {
                 contentLength = -1;
             }
 
-            HttpRange range = ranges.get(0);
-            long start = range.getRangeStart(contentLength);
-            long end = range.getRangeEnd(contentLength);
-            long regionLength = Math.max(0, end - start + 1);
+            HttpRange range        = ranges.get(0);
+            long      start        = range.getRangeStart(contentLength);
+            long      end          = range.getRangeEnd(contentLength);
+            long      regionLength = Math.max(0, end - start + 1);
 
             ResourceRegion region = new ResourceRegion(resource, start, regionLength);
             return ResponseEntity.status(206)
@@ -119,15 +130,15 @@ public class TasksController {
 
     private TaskResponse toResponse(TaskEntity t) {
         TaskResponse r = new TaskResponse();
-        r.id = t.getId();
-        r.projectId = t.getProjectId();
-        r.datasetId = t.getDatasetId();
-        r.batchId = t.getBatchId();
-        r.payloadJson = t.getPayloadJson();
-        r.status = t.getStatus() != null ? t.getStatus().name() : null;
+        r.id             = t.getId();
+        r.projectId      = t.getProjectId();
+        r.datasetId      = t.getDatasetId();
+        r.batchId        = t.getBatchId();
+        r.payloadJson    = t.getPayloadJson();
+        r.status         = t.getStatus() != null ? t.getStatus().name() : null;
         r.lockedByUserId = t.getLockedByUserId();
-        r.lockedAt = t.getLockedAt();
-        r.createdAt = t.getCreatedAt();
+        r.lockedAt       = t.getLockedAt();
+        r.createdAt      = t.getCreatedAt();
         return r;
     }
 }

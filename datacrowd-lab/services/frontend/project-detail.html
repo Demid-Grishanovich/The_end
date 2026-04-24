@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DataCrowd Lab — Project</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav>
+  <a href="dashboard.html" class="nav-logo">🏷 DataCrowd Lab</a>
+  <div class="nav-r">
+    <span class="chip">Client</span>
+    <span class="nav-name" id="uname"></span>
+    <a href="dashboard.html" class="btn btn-g btn-sm">← Dashboard</a>
+    <button class="btn btn-g btn-sm" onclick="logout()">Logout</button>
+  </div>
+</nav>
+<div class="wrap-sm">
+  <div id="loading" style="text-align:center;padding:60px;color:var(--tm)">
+    <span class="spin spin-d"></span><p style="margin-top:12px">Loading project...</p>
+  </div>
+  <div id="content" class="hide">
+
+    <!-- Header -->
+    <div class="ph">
+      <div>
+        <div class="ptitle" id="pName">—</div>
+        <div class="psub" id="pMeta">—</div>
+      </div>
+      <span class="badge" id="pBadge">—</span>
+    </div>
+
+    <div id="msg" class="hide"></div>
+
+    <!-- Progress card -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div class="ctitle" style="margin-bottom:0">Dataset Progress</div>
+        <div id="sseStatus" style="font-size:12px;color:var(--ts)">Polling...</div>
+      </div>
+      <div class="prow">
+        <span id="progressLbl">Progress</span>
+        <span id="progressPct">0%</span>
+      </div>
+      <div class="pbar" style="height:10px"><div class="pfill" id="progressBar" style="width:0%"></div></div>
+      <div class="srow mt8">
+        <div class="sbox"><div class="slbl">Total Tasks</div><div class="sval" id="totalTasks">—</div></div>
+        <div class="sbox"><div class="slbl">Completed</div><div class="sval" id="doneTasks">—</div></div>
+        <div class="sbox"><div class="slbl">Remaining</div><div class="sval" id="leftTasks">—</div></div>
+      </div>
+    </div>
+
+    <!-- Project info -->
+    <div class="card" style="margin-bottom:14px">
+      <div class="ctitle">Project Settings</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
+        <div style="background:var(--bg);border-radius:var(--rs);padding:12px">
+          <div style="font-size:11px;color:var(--ts);margin-bottom:3px">Data Type</div>
+          <div style="font-weight:600" id="pType">—</div>
+        </div>
+        <div style="background:var(--bg);border-radius:var(--rs);padding:12px">
+          <div style="font-size:11px;color:var(--ts);margin-bottom:3px">Reviewers</div>
+          <div style="font-weight:600" id="pReviewers">—</div>
+        </div>
+        <div style="background:var(--bg);border-radius:var(--rs);padding:12px">
+          <div style="font-size:11px;color:var(--ts);margin-bottom:3px">Reward per Task</div>
+          <div style="font-weight:600" id="pReward">—</div>
+        </div>
+        <div style="background:var(--bg);border-radius:var(--rs);padding:12px">
+          <div style="font-size:11px;color:var(--ts);margin-bottom:3px">Billing</div>
+          <div style="font-weight:600" id="pBilling">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="card">
+      <div class="ctitle">Actions</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+        <button id="payBtn" class="btn btn-p hide" onclick="goPayment()">💳 Pay & Activate</button>
+        <button class="btn btn-o" onclick="exportData()">📥 Export Results (JSONL)</button>
+        <button class="btn btn-o" onclick="exportCsv()">📥 Export Results (CSV)</button>
+        <a href="dashboard.html" class="btn btn-g">← Back to Dashboard</a>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const API='http://localhost:8080/api';
+const tok=localStorage.token;
+if(!tok) location.href='index.html';
+document.getElementById('uname').textContent=localStorage.uname||'';
+function logout(){localStorage.clear();location.href='index.html';}
+const H=()=>({'Authorization':'Bearer '+tok,'Content-Type':'application/json'});
+const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+
+const id=new URLSearchParams(location.search).get('id');
+if(!id) location.href='dashboard.html';
+
+let proj=null;
+let sseSource=null;
+
+async function load(){
+  try{
+    const r=await fetch(`${API}/core/projects/${id}`,{headers:H()});
+    if(r.status===401){logout();return;}
+    proj=await r.json();
+    document.getElementById('loading').classList.add('hide');
+    document.getElementById('content').classList.remove('hide');
+    render(proj);
+    startSSE();
+  }catch(e){
+    document.getElementById('loading').innerHTML=`<div class="alert a-err">Failed to load: ${e.message}</div>`;
+  }
+}
+
+function render(p){
+  document.getElementById('pName').textContent=p.name;
+  document.getElementById('pMeta').textContent=(p.dataType||'TEXT')+' · Created '+new Date(p.createdAt).toLocaleDateString();
+  const comp=(p.progress||0)>=100||p.status==='COMPLETED';
+  const paid=p.billingStatus==='PAID';
+  document.getElementById('pBadge').className='badge '+(comp?'b-done':paid?'b-active':'b-unpaid');
+  document.getElementById('pBadge').textContent=comp?'Completed':paid?'Active':'Unpaid';
+  document.getElementById('pType').textContent=p.dataType||'TEXT';
+  document.getElementById('pReviewers').textContent=(p.reviewersCount||1)+' per task';
+  document.getElementById('pReward').textContent=(p.rewardPoints||0)+' pts';
+  document.getElementById('pBilling').textContent=p.billingStatus||'UNPAID';
+  document.getElementById('pBilling').style.color=paid?'var(--ok)':'var(--err)';
+  updateProgress(p.progress||0,p.completedTasks||0,p.totalTasks||0);
+  if(!paid) document.getElementById('payBtn').classList.remove('hide');
+}
+
+function updateProgress(pct,done,total){
+  document.getElementById('progressPct').textContent=pct+'%';
+  document.getElementById('progressBar').style.width=pct+'%';
+  document.getElementById('progressBar').className='pfill'+(pct>=100?' ok':'');
+  document.getElementById('totalTasks').textContent=total;
+  document.getElementById('doneTasks').textContent=done;
+  document.getElementById('leftTasks').textContent=Math.max(0,total-done);
+}
+
+function startSSE(){
+  if(sseSource) sseSource.close();
+  try{
+    sseSource=new EventSource(`${API}/core/projects/${id}/progress/stream`,{headers:{}});
+    // SSE doesn't support custom headers natively — use polling fallback
+    sseSource.onerror=()=>{ sseSource.close(); startPolling(); };
+    sseSource.addEventListener('progress',e=>{
+      const d=JSON.parse(e.data);
+      updateProgress(d.progress,d.completed,d.total);
+      document.getElementById('sseStatus').textContent='Live ●';
+      document.getElementById('sseStatus').style.color='var(--ok)';
+      if(d.status==='COMPLETED') sseSource.close();
+    });
+  }catch(e){ startPolling(); }
+}
+
+function startPolling(){
+  document.getElementById('sseStatus').textContent='Polling every 5s';
+  setInterval(async()=>{
+    try{
+      const r=await fetch(`${API}/core/projects/${id}`,{headers:H()});
+      const p=await r.json();
+      updateProgress(p.progress||0,p.completedTasks||0,p.totalTasks||0);
+    }catch(e){}
+  },5000);
+}
+
+function goPayment(){ location.href='payment.html?id='+id; }
+
+async function exportData(){
+  try{
+    const r=await fetch(`${API}/core/exports?projectId=${id}&datasetId=&format=jsonl`,{headers:H()});
+    if(!r.ok) throw new Error('Export failed');
+    const blob=await r.blob();
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download=`export_${id}.jsonl`;a.click();
+  }catch(e){alert('Export error: '+e.message);}
+}
+
+async function exportCsv(){
+  try{
+    const r=await fetch(`${API}/core/exports?projectId=${id}&format=csv`,{headers:H()});
+    if(!r.ok) throw new Error('Export failed');
+    const blob=await r.blob();
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download=`export_${id}.csv`;a.click();
+  }catch(e){alert('Export error: '+e.message);}
+}
+
+load();
+</script>
+</body>
+</html>

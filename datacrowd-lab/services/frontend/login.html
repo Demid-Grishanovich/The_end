@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DataCrowd Lab — Login</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="auth-pg">
+  <div class="auth-box">
+    <div class="auth-logo">🏷 DataCrowd Lab</div>
+    <div class="auth-title">Welcome back</div>
+    <div class="auth-sub">Sign in to manage your labeling projects</div>
+
+    <div id="err" class="alert a-err hide"></div>
+
+    <div class="fg">
+      <label class="lbl">Email</label>
+      <input id="email" type="email" class="inp" placeholder="you@example.com">
+    </div>
+    <div class="fg">
+      <label class="lbl">Password</label>
+      <input id="pwd" type="password" class="inp" placeholder="••••••••">
+    </div>
+
+    <button id="btn" class="btn btn-p btn-full mt8" onclick="login()">Sign In</button>
+
+    <hr class="div">
+    <div class="auth-foot">
+      No account? <a href="register.html" class="alink">Register as Worker</a>
+    </div>
+  </div>
+</div>
+<script>
+const API='http://localhost:8080/api';
+if(localStorage.token) go();
+function go(){ window.location.href = localStorage.role==='WORKER'?'worker.html':'dashboard.html'; }
+async function login(){
+  const btn=document.getElementById('btn');
+  const e=document.getElementById('email').value.trim();
+  const p=document.getElementById('pwd').value;
+  hide('');
+  if(!e||!p){showErr('Fill in all fields');return;}
+  btn.disabled=true; btn.innerHTML='<span class="spin"></span> Signing in...';
+  try{
+    const r=await fetch(`${API}/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:e,password:p})});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.message||'Wrong email or password');
+    localStorage.setItem('token',d.token);
+    localStorage.setItem('role',d.role);
+    localStorage.setItem('userId',d.userId);
+    localStorage.setItem('uname',d.username||e.split('@')[0]);
+    go();
+  }catch(ex){showErr(ex.message);btn.disabled=false;btn.textContent='Sign In';}
+}
+function showErr(m){const el=document.getElementById('err');el.textContent='⚠ '+m;el.classList.remove('hide');}
+function hide(){document.getElementById('err').classList.add('hide');}
+document.addEventListener('keydown',ev=>{if(ev.key==='Enter')login();});
+</script>
+</body>
+</html>
