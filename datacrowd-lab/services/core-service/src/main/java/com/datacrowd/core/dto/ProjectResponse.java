@@ -21,6 +21,7 @@ public class ProjectResponse {
     public int           minAnswerSeconds; // НОВОЕ
     public Instant       createdAt;
     public Instant       updatedAt;
+    public Long availableTasks;
 
     // Поля прогресса для прогресс-бара
     public Long    totalTasks;

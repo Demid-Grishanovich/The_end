@@ -16,6 +16,11 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.web.bind.annotation.*;
+import com.datacrowd.core.entity.BillingStatus;
+import com.datacrowd.core.entity.ProjectStatus;
+import com.datacrowd.core.repo.ProjectRepository;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -28,11 +33,15 @@ public class ProjectsController {
 
     private final ProjectService  projectService;
     private final TaskRepository  taskRepository;
+    private final ProjectRepository projectRepository;
 
     public ProjectsController(ProjectService projectService,
-                              TaskRepository taskRepository) {
+                              TaskRepository taskRepository,
+                         ProjectRepository projectRepository) {
         this.projectService = projectService;
         this.taskRepository = taskRepository;
+        this.projectRepository = projectRepository;
+
     }
 
     @Operation(
@@ -89,6 +98,34 @@ public class ProjectsController {
             ));
         }
         return result;
+    }
+
+    @Operation(summary = "List projects available for workers")
+    @GetMapping("/available")
+    public List<ProjectResponse> availableForWorkers() {
+        // Get all PAID projects that are not completed and have available tasks
+        return projectRepository.findAll().stream()
+                .filter(p -> p.getBillingStatus() == BillingStatus.PAID)
+                .filter(p -> p.getStatus() != ProjectStatus.COMPLETED)
+                .filter(p -> taskRepository.countAvailableByProject(p.getId()) > 0)
+                .map(p -> {
+                    ProjectResponse r = toResponse(p);
+                    r.availableTasks = taskRepository.countAvailableByProject(p.getId());
+                    return r;
+                })
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * GET /core/projects/{id}/public
+     * Публичные детали проекта — доступны воркерам (без проверки владельца).
+     */
+    @Operation(summary = "Get project public info (for workers)")
+    @GetMapping("/{id}/public")
+    public ProjectResponse getPublic(@PathVariable UUID id) {
+        ProjectEntity p = projectRepository.findById(id)
+                .orElseThrow(() -> new com.datacrowd.core.api.ApiNotFoundException("Project not found: " + id));
+        return toResponse(p);
     }
 
     private ProjectResponse toResponse(ProjectEntity p) {

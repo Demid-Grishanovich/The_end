@@ -42,6 +42,7 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/prometheus", "/actuator/health").permitAll()
                         // Internal API
                         .requestMatchers("/internal/**").permitAll()
+                        .requestMatchers("/core/tasks/*/asset").permitAll()
                         // Всё остальное требует JWT
                         .anyRequest().authenticated()
                 )

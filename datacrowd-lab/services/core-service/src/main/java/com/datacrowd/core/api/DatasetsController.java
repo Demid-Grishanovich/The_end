@@ -14,6 +14,9 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import com.datacrowd.core.service.ProjectService;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import java.util.Map;
 import java.util.UUID;
@@ -26,13 +29,15 @@ public class DatasetsController {
     private final DatasetService       datasetService;
     private final DatasetRepository    datasetRepository;
     private final FailedItemRepository failedItemRepository;
+    private final ProjectService projectService;
 
     public DatasetsController(DatasetService datasetService,
                               DatasetRepository datasetRepository,
-                              FailedItemRepository failedItemRepository) {
+                              FailedItemRepository failedItemRepository,ProjectService projectService) {
         this.datasetService       = datasetService;
         this.datasetRepository    = datasetRepository;
         this.failedItemRepository = failedItemRepository;
+        this.projectService       = projectService;
     }
 
     @Operation(summary = "Get dataset by ID")
@@ -57,6 +62,18 @@ public class DatasetsController {
                         "totalItems", d.getTotalItems()
                 )))
                 .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @Operation(summary = "Get datasets for a project")
+    @GetMapping("/projects/{projectId}/datasets")
+    public List<DatasetResponse> getByProject(@PathVariable UUID projectId) {
+        UUID userId = AuthContext.getUserIdOrThrow();
+        // verify ownership
+        projectService.getOwnedOrThrow(projectId, userId);
+        return datasetRepository.findAllByProjectId(projectId)
+                .stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
     }
 
     @Operation(

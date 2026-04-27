@@ -15,7 +15,6 @@
   </div>
 </nav>
 <div class="wrap-sm">
-
   <div style="text-align:center;margin-bottom:28px">
     <div style="font-size:44px;margin-bottom:10px">💳</div>
     <div class="ptitle">Activate Your Project</div>
@@ -24,15 +23,13 @@
 
   <div id="msg" class="hide"></div>
 
-  <!-- Project summary -->
   <div class="card" style="margin-bottom:14px" id="projCard">
     <div style="text-align:center;padding:20px;color:var(--tm)">
       <span class="spin spin-d"></span><p style="margin-top:8px">Loading project...</p>
     </div>
   </div>
 
-  <!-- Pricing -->
-  <div class="card" style="margin-bottom:20px">
+  <div class="card" style="margin-bottom:20px" id="pricingCard">
     <div class="ctitle">Pricing</div>
     <div class="cdesc">One-time payment to unlock task generation</div>
     <div style="border-top:1px solid var(--bd);padding-top:14px">
@@ -48,15 +45,12 @@
       </div>
     </div>
     <div class="alert a-info" style="margin-top:4px">
-      🔒 Secure payment via Stripe · Test card: <b>4242 4242 4242 4242</b>
+      🔒 Secure payment via Stripe · Test card: <b>4242 4242 4242 4242</b> · Exp: any · CVC: any
     </div>
   </div>
 
-  <button id="payBtn" class="btn btn-p btn-full" onclick="pay()">💳 Pay with Stripe</button>
-
-  <div id="paidBox" class="hide" style="margin-top:14px">
-    <div class="alert a-ok tc">✅ Project is already paid and active!</div>
-    <a href="dashboard.html" class="btn btn-p btn-full mt8">Go to Dashboard →</a>
+  <div id="actionArea">
+    <button id="payBtn" class="btn btn-p btn-full" onclick="pay()">💳 Pay with Stripe</button>
   </div>
 
   <div class="tc mt14">
@@ -65,55 +59,145 @@
 </div>
 
 <script>
-const API='http://localhost:8080/api';
-const tok=localStorage.token;
-if(!tok) location.href='index.html';
-document.getElementById('uname').textContent=localStorage.uname||'';
-function logout(){localStorage.clear();location.href='index.html';}
+const API = 'http://localhost:8080/api';
+const tok = localStorage.token;
+if (!tok) location.href = 'index.html';
+document.getElementById('uname').textContent = localStorage.uname || '';
+function logout() { localStorage.clear(); location.href = 'index.html'; }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
 
-const id=new URLSearchParams(location.search).get('id');
-if(!id) location.href='dashboard.html';
+const params = new URLSearchParams(location.search);
+const isSuccess = params.get('success') === '1';
+const isCancel  = params.get('cancel')  === '1';
 
-async function loadProject(){
-  try{
-    const r=await fetch(`${API}/core/projects/${id}`,{headers:{'Authorization':'Bearer '+tok}});
-    const p=await r.json();
-    const paid=p.billingStatus==='PAID';
-    document.getElementById('projCard').innerHTML=`
+let id = params.get('id') || params.get('projectId') || localStorage.getItem('pendingPaymentProjectId');
+if (!id) { location.href = 'dashboard.html'; }
+
+// ── After Stripe redirect back ───────────────────────────────────────────
+if (isSuccess) {
+  const b = document.getElementById('msg');
+  b.className = 'alert a-ok';
+  b.textContent = '✅ Payment successful! Generating tasks...';
+  localStorage.removeItem('pendingPaymentProjectId');
+
+  // Trigger generate-tasks NOW — project is PAID at this point
+  (async () => {
+    try {
+      const datasetId = localStorage.getItem('pendingDatasetId');
+      const projectId = localStorage.getItem('pendingProjectId') || id;
+
+      if (datasetId) {
+        // Wait a moment for webhook to process billing update
+        await new Promise(r => setTimeout(r, 2000));
+
+        const gr = await fetch(`${API}/core/datasets/${datasetId}/generate-tasks`, {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectId })
+        });
+
+        localStorage.removeItem('pendingDatasetId');
+        localStorage.removeItem('pendingProjectId');
+
+        if (gr.ok) {
+          document.getElementById('msg').textContent = '✅ Payment successful! Tasks are being generated...';
+        } else {
+          const e = await gr.json().catch(() => ({}));
+          document.getElementById('msg').textContent =
+            '✅ Payment successful! Note: ' + (e.detail || e.message || 'Task generation will start shortly.');
+        }
+      } else {
+        document.getElementById('msg').textContent = '✅ Payment successful! Your project is now active.';
+      }
+    } catch(e) {
+      document.getElementById('msg').textContent = '✅ Payment successful! Tasks will generate automatically.';
+    }
+
+    // Show navigation buttons after processing
+    document.getElementById('actionArea').innerHTML = `
+      <div style="display:flex;gap:10px">
+        <a href="project-detail.html?id=${id}" class="btn btn-p" style="flex:1;justify-content:center">View Project →</a>
+        <a href="dashboard.html" class="btn btn-o" style="flex:1;justify-content:center">Dashboard</a>
+      </div>`;
+  })();
+}
+
+if (isCancel) {
+  const b = document.getElementById('msg');
+  b.className = 'alert a-info';
+  b.textContent = 'ℹ Payment cancelled. You can try again whenever you\'re ready.';
+  localStorage.removeItem('pendingPaymentProjectId');
+  localStorage.removeItem('pendingDatasetId');
+  localStorage.removeItem('pendingProjectId');
+}
+
+// ── Load project info ────────────────────────────────────────────────────
+async function loadProject() {
+  if (!id) return;
+  try {
+    const r = await fetch(`${API}/core/projects/${id}`, {
+      headers: { 'Authorization': 'Bearer ' + tok }
+    });
+    if (r.status === 401) { logout(); return; }
+    if (r.status === 404) {
+      document.getElementById('projCard').innerHTML = '<div class="alert a-err">Project not found.</div>';
+      return;
+    }
+    const p = await r.json();
+    const paid = p.billingStatus === 'PAID';
+
+    document.getElementById('projCard').innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div>
-          <div style="font-size:16px;font-weight:700">${p.name}</div>
-          <div style="font-size:13px;color:var(--ts);margin-top:3px">${p.dataType} · ${p.reviewersCount} reviewer(s) · ${p.rewardPoints} pts/task</div>
+          <div style="font-size:16px;font-weight:700">${esc(p.name)}</div>
+          <div style="font-size:13px;color:var(--ts);margin-top:3px">
+            ${p.dataType||'TEXT'} · ${p.reviewersCount||1} reviewer(s) · ${p.rewardPoints||0} pts/task
+          </div>
         </div>
         <span class="badge ${paid?'b-paid':'b-unpaid'}">${paid?'PAID':'UNPAID'}</span>
       </div>`;
-    if(paid){
-      document.getElementById('payBtn').classList.add('hide');
-      document.getElementById('paidBox').classList.remove('hide');
+
+    if (paid && !isSuccess) {
+      document.getElementById('pricingCard').classList.add('hide');
+      document.getElementById('actionArea').innerHTML = `
+        <div class="alert a-ok tc">✅ This project is already paid and active!</div>
+        <div style="display:flex;gap:10px;margin-top:10px">
+          <a href="project-detail.html?id=${id}" class="btn btn-p" style="flex:1;justify-content:center">View Project →</a>
+          <a href="dashboard.html" class="btn btn-o" style="flex:1;justify-content:center">Dashboard</a>
+        </div>`;
     }
-  }catch(e){
-    document.getElementById('projCard').innerHTML=`<div class="alert a-err">Failed to load project</div>`;
+  } catch (e) {
+    document.getElementById('projCard').innerHTML =
+      `<div class="alert a-err">Failed to load: ${esc(e.message)}</div>
+       <a href="dashboard.html" class="btn btn-o btn-sm" style="margin-top:10px">← Dashboard</a>`;
   }
 }
 
-async function pay(){
-  const btn=document.getElementById('payBtn');
-  btn.disabled=true;btn.innerHTML='<span class="spin"></span> Redirecting to Stripe...';
-  try{
-    const r=await fetch(`${API}/payments/checkout`,{method:'POST',headers:{'Authorization':'Bearer '+tok,'Content-Type':'application/json'},body:JSON.stringify({projectId:id})});
-    const d=await r.json();
-    if(!r.ok) throw new Error(d.message||'Payment error');
-    location.href=d.checkoutUrl;
-  }catch(e){
-    const b=document.getElementById('msg');b.className='alert a-err';b.textContent='⚠ '+e.message;
-    btn.disabled=false;btn.textContent='💳 Pay with Stripe';
+// ── Pay ──────────────────────────────────────────────────────────────────
+async function pay() {
+  const btn = document.getElementById('payBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> Redirecting to Stripe...';
+  try {
+    const r = await fetch(`${API}/payments/checkout`, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId: id })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.message || 'Payment error');
+    localStorage.setItem('pendingPaymentProjectId', id);
+    location.href = d.checkoutUrl;
+  } catch (e) {
+    const b = document.getElementById('msg');
+    b.className = 'alert a-err';
+    b.textContent = '⚠ ' + e.message;
+    btn.disabled = false;
+    btn.innerHTML = '💳 Pay with Stripe';
   }
 }
 
 loadProject();
-if(new URLSearchParams(location.search).get('success')){
-  const b=document.getElementById('msg');b.className='alert a-ok';b.textContent='✅ Payment successful! Project is now active.';
-}
 </script>
 </body>
 </html>

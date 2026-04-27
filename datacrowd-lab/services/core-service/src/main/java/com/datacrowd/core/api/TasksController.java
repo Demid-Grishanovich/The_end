@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Optional;
 import java.util.UUID;
 
 @RestController
@@ -43,9 +44,13 @@ public class TasksController {
     }
 
     @GetMapping("/next")
-    public ResponseEntity<TaskResponse> next() {
+    public ResponseEntity<TaskResponse> next(
+            @RequestParam(required = false) UUID projectId) {
         UUID userId = AuthContext.getUserIdOrThrow();
-        return workerTaskService.nextTask(userId)
+        Optional<TaskEntity> task = projectId != null
+                ? workerTaskService.nextTaskForProject(userId, projectId)
+                : workerTaskService.nextTask(userId);
+        return task
                 .map(t -> ResponseEntity.ok(toResponse(t)))
                 .orElseGet(() -> ResponseEntity.noContent().build());
     }

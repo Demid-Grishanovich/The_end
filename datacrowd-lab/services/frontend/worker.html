@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DataCrowd Lab — Worker</title>
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>DataCrowd Lab – Worker</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <nav>
@@ -11,185 +11,137 @@
   <div class="nav-r">
     <span class="chip">Worker</span>
     <span class="nav-name" id="uname"></span>
-    <a href="stats.html" class="btn btn-o btn-sm">📊 My Stats</a>
+    <a href="stats.html" class="btn btn-o btn-sm">My Stats</a>
     <button class="btn btn-g btn-sm" onclick="logout()">Logout</button>
   </div>
 </nav>
-<div class="wrap-sm">
+
+<div class="wrap">
   <div class="ph">
     <div>
-      <div class="ptitle">Task Queue</div>
-      <div class="psub">Pick up tasks and label them to earn points</div>
+      <div class="ptitle">Worker Dashboard</div>
+      <div class="psub">Choose a project and start earning points</div>
     </div>
   </div>
 
-  <div id="msg" class="hide"></div>
-
-  <!-- Empty state -->
-  <div id="empty" class="card tc" style="padding:60px 40px">
-    <div style="font-size:48px;margin-bottom:14px">📋</div>
-    <div style="font-size:18px;font-weight:600;margin-bottom:8px">No active task</div>
-    <div style="font-size:14px;color:var(--ts);margin-bottom:22px">Pick up a new task from the queue to start earning points</div>
-    <button class="btn btn-p" id="getBtn" onclick="getTask()">Get Next Task</button>
+  <!-- Tabs -->
+  <div style="display:flex;gap:4px;margin-bottom:24px;background:var(--bg);border-radius:var(--r);padding:4px;width:fit-content">
+    <button id="tabDo" class="btn btn-p btn-sm" onclick="switchTab('do')" style="min-width:140px">Do Tasks</button>
+    <button id="tabReview" class="btn btn-g btn-sm" onclick="switchTab('review')" style="min-width:140px">Review Answers</button>
   </div>
 
-  <!-- Task section -->
-  <div id="taskSec" class="hide">
-    <!-- Timer header -->
-    <div class="card" style="margin-bottom:14px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-        <div>
-          <div style="font-size:11px;font-weight:600;color:var(--p);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Active Task</div>
-          <div style="font-size:12px;color:var(--ts)">ID: <span id="tidDisp" style="font-family:monospace"></span></div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-size:11px;color:var(--ts);margin-bottom:2px">Time spent</div>
-          <div id="timer" style="font-size:22px;font-weight:700;color:var(--p);font-variant-numeric:tabular-nums">0:00</div>
-        </div>
-      </div>
-      <div class="pbar"><div class="pfill" id="timerBar" style="width:0%;transition:width 1s linear"></div></div>
-      <div style="font-size:11px;color:var(--tm);margin-top:4px">Minimum time required before submitting</div>
-    </div>
+  <div id="msgBox" class="hide"></div>
 
-    <!-- Content -->
-    <div class="card" style="margin-bottom:14px">
-      <div style="font-size:11px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Content to Label</div>
-      <div class="task-content" id="taskContent">—</div>
-    </div>
-
-    <!-- Labels -->
-    <div class="card" style="margin-bottom:14px">
-      <div style="font-size:15px;font-weight:600;margin-bottom:3px">Select Label</div>
-      <div style="font-size:13px;color:var(--ts);margin-bottom:14px">Choose the most appropriate label for the content above</div>
-      <div class="labels" id="labelOpts"></div>
-      <div id="selInfo" class="hide" style="margin-top:12px;padding:10px 14px;background:var(--pl);border-radius:var(--rs);font-size:13px;font-weight:500;color:var(--p)">
-        Selected: <span id="selVal"></span>
+  <!-- ═══ DO TASKS ═══ -->
+  <div id="tabDoSec">
+    <div id="projectsGrid" class="grid3">
+      <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--tm)">
+        <span class="spin spin-d"></span><p style="margin-top:10px">Loading projects...</p>
       </div>
     </div>
-
-    <!-- Actions -->
-    <div style="display:flex;gap:10px">
-      <button class="btn btn-o" style="flex:1" onclick="skip()">Skip Task</button>
-      <button id="subBtn" class="btn btn-p" style="flex:2;justify-content:center" disabled onclick="submit()">Submit Answer</button>
-    </div>
   </div>
 
-  <!-- Done state -->
-  <div id="doneState" class="hide card tc" style="padding:44px">
-    <div style="font-size:48px;margin-bottom:12px">🎉</div>
-    <div style="font-size:18px;font-weight:600;margin-bottom:8px">Task Submitted!</div>
-    <div style="font-size:14px;color:var(--ts);margin-bottom:20px" id="ptsMsg"></div>
-    <button class="btn btn-p" onclick="nextTask()">Next Task →</button>
+  <!-- ═══ REVIEW ═══ -->
+  <div id="tabReviewSec" class="hide">
+    <div class="card tc" style="padding:48px 32px;max-width:500px;margin:0 auto">
+      <div style="font-size:48px;margin-bottom:16px">🔍</div>
+      <div style="font-size:20px;font-weight:700;margin-bottom:8px">Review Answers</div>
+      <div style="font-size:14px;color:var(--ts);margin-bottom:24px;line-height:1.6">
+        Click the button below and the system will automatically<br>
+        find the next answer waiting for your review
+      </div>
+      <button id="goReviewBtn" class="btn btn-p" style="min-width:220px;font-size:15px;justify-content:center" onclick="goToReview()">
+        Find Answer to Review →
+      </button>
+      <div style="margin-top:16px;font-size:12px;color:var(--tm)">
+        The system selects from all projects with pending answers
+      </div>
+    </div>
   </div>
 </div>
 
 <script>
-const API='http://localhost:8080/api';
-const tok=localStorage.token;
-if(!tok) location.href='index.html';
-document.getElementById('uname').textContent=localStorage.uname||'';
-function logout(){localStorage.clear();location.href='index.html';}
+  const API = 'http://localhost:8080/api';
+  const tok = localStorage.token;
+  if (!tok) location.href = 'index.html';
+  document.getElementById('uname').textContent = localStorage.uname || '';
 
-let task=null,chosen=null,lockTime=null,timerIv=null;
-const show=id=>document.getElementById(id).classList.remove('hide');
-const hide=id=>document.getElementById(id).classList.add('hide');
+  function logout() { localStorage.clear(); location.href = 'index.html'; }
+  const H = () => ({ 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json' });
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const show = id => document.getElementById(id).classList.remove('hide');
+  const hide = id => document.getElementById(id).classList.add('hide');
 
-const LABELS={
-  TEXT:[['positive','👍 Positive'],['negative','👎 Negative'],['neutral','😐 Neutral'],['mixed','🔀 Mixed']],
-  IMAGE:[['yes','✅ Yes'],['no','❌ No'],['unclear','❓ Unclear'],['damaged','⚠ Damaged']],
-  CODE:[['correct','✅ Correct'],['incorrect','❌ Incorrect'],['partial','⚠ Partial']],
-  MATH:[['correct','✅ Correct'],['incorrect','❌ Incorrect'],['undefined','❓ Undefined']],
-  AUDIO:[['clear','🔊 Clear'],['noisy','🔇 Noisy'],['silent','🔕 Silent']],
-};
+  function switchTab(tab) {
+    if (tab === 'do') {
+      show('tabDoSec'); hide('tabReviewSec');
+      document.getElementById('tabDo').className   = 'btn btn-p btn-sm';
+      document.getElementById('tabReview').className = 'btn btn-g btn-sm';
+    } else {
+      hide('tabDoSec'); show('tabReviewSec');
+      document.getElementById('tabDo').className   = 'btn btn-g btn-sm';
+      document.getElementById('tabReview').className = 'btn btn-p btn-sm';
+    }
+  }
 
-function renderLabels(dtype){
-  const opts=LABELS[dtype]||LABELS.TEXT;
-  document.getElementById('labelOpts').innerHTML=opts.map(
-    ([v,t])=>`<button class="lbtn" onclick="pick('${v}',this)">${t}</button>`
-  ).join('');
-  chosen=null;
-  hide('selInfo');
-  document.getElementById('subBtn').disabled=true;
-}
+  // ─── DO TASKS ────────────────────────────────────────────────────────────
+  async function loadProjects() {
+    const grid = document.getElementById('projectsGrid');
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--tm)"><span class="spin spin-d"></span><p style="margin-top:10px">Loading...</p></div>';
+    try {
+      // Правильный эндпоинт для worker-а: /core/projects/available
+      const r = await fetch(`${API}/core/projects/available`, { headers: H() });
+      if (r.status === 401) { logout(); return; }
+      if (!r.ok) throw new Error(`Status ${r.status}`);
 
-function pick(v,btn){
-  chosen=v;
-  document.querySelectorAll('.lbtn').forEach(b=>b.classList.remove('sel'));
-  btn.classList.add('sel');
-  document.getElementById('selVal').textContent=v;
-  show('selInfo');
-  document.getElementById('subBtn').disabled=false;
-}
+      const data = await r.json();
+      const projects = Array.isArray(data) ? data : (data.content || []);
 
-function startTimer(){
-  lockTime=Date.now();
-  clearInterval(timerIv);
-  timerIv=setInterval(()=>{
-    const s=Math.floor((Date.now()-lockTime)/1000);
-    const m=Math.floor(s/60);
-    document.getElementById('timer').textContent=m+':'+(s%60+'').padStart(2,'0');
-    document.getElementById('timerBar').style.width=Math.min(s/30*100,100)+'%';
-  },1000);
-}
+      if (!projects.length) {
+        grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--tm)">No active projects available right now. Check back later!</div>';
+        return;
+      }
 
-async function getTask(){
-  const btn=document.getElementById('getBtn');
-  btn.disabled=true;btn.innerHTML='<span class="spin"></span> Loading...';
-  try{
-    const r=await fetch(`${API}/core/tasks/next`,{headers:{'Authorization':'Bearer '+tok}});
-    if(r.status===404||r.status===204){showMsg('info','No tasks available right now. Check back soon!');btn.disabled=false;btn.textContent='Get Next Task';return;}
-    if(r.status===403){showMsg('err','Your trust score is too low to receive tasks.');btn.disabled=false;btn.textContent='Get Next Task';return;}
-    task=await r.json();
-    await fetch(`${API}/core/tasks/${task.id}/lock`,{method:'POST',headers:{'Authorization':'Bearer '+tok}});
-    renderTask(task);
-  }catch(e){showMsg('err','Failed: '+e.message);btn.disabled=false;btn.textContent='Get Next Task';}
-}
+      grid.innerHTML = projects.map(p => `
+      <div class="pcard" onclick="startProject('${p.id}', '${esc(p.name)}', '${p.dataType||'TEXT'}')">
+        <div class="pcard-hd">
+          <div class="pcard-name">${esc(p.name)}</div>
+          <span class="badge b-active">Active</span>
+        </div>
+        <div class="pcard-sub">${esc(p.dataType||'TEXT')} · ${p.reviewersCount||1} reviewer(s)</div>
+        <div style="margin:10px 0;display:flex;gap:8px;flex-wrap:wrap">
+          <span style="font-size:12px;background:var(--pl);color:var(--p);padding:3px 8px;border-radius:100px">
+            ${p.rewardPoints||0} pts/task
+          </span>
+          ${p.availableTasks !== undefined && p.availableTasks !== null
+              ? `<span style="font-size:12px;background:var(--bg);color:var(--ts);padding:3px 8px;border-radius:100px">${p.availableTasks} available</span>`
+              : ''}
+        </div>
+        ${p.description ? `<div style="font-size:12px;color:var(--ts);margin-bottom:10px">${esc(p.description)}</div>` : ''}
+        <button class="btn btn-p btn-sm" style="width:100%;justify-content:center">Start Working</button>
+      </div>
+    `).join('');
 
-function renderTask(t){
-  hide('empty');hide('doneState');show('taskSec');
-  chosen=null;
-  document.getElementById('tidDisp').textContent=t.id.substring(0,8)+'...';
-  let content='No content',dtype='TEXT';
-  try{
-    const p=JSON.parse(t.payloadJson||'{}');
-    dtype=(p.type||p.format||'TEXT').toUpperCase();
-    content=p.text||p.content||p.filePath||JSON.stringify(p,null,2);
-  }catch(e){}
-  document.getElementById('taskContent').textContent=content;
-  renderLabels(dtype);
-  startTimer();
-}
+    } catch(e) {
+      grid.innerHTML = `<div style="grid-column:1/-1" class="alert a-err">Failed to load projects: ${esc(e.message)}</div>`;
+    }
+  }
 
-async function submit(){
-  if(!chosen||!task) return;
-  const btn=document.getElementById('subBtn');
-  btn.disabled=true;btn.innerHTML='<span class="spin"></span> Submitting...';
-  try{
-    const r=await fetch(`${API}/core/tasks/${task.id}/submit`,{
-      method:'POST',headers:{'Authorization':'Bearer '+tok,'Content-Type':'application/json'},
-      body:JSON.stringify({answer:JSON.stringify({label:chosen})})
-    });
-    const d=await r.json();
-    if(!r.ok) throw new Error(d.detail||d.message||'Submit failed');
-    clearInterval(timerIv);
-    hide('taskSec');show('doneState');
-    const pts=d.pointsAwarded||0;
-    document.getElementById('ptsMsg').textContent=pts>0?`+${pts} points earned! Keep it up!`:'Answer submitted for review. Points awarded after approval.';
-    task=null;
-  }catch(e){showMsg('err',e.message);btn.disabled=false;btn.textContent='Submit Answer';}
-}
+  function startProject(projectId, projectName, dataType) {
+    localStorage.setItem('workerProjectId', projectId);
+    localStorage.setItem('workerProjectName', projectName);
+    localStorage.setItem('workerProjectDataType', (dataType||'TEXT').toUpperCase());
+    location.href = `worker-task.html?projectId=${projectId}`;
+  }
 
-async function skip(){
-  if(task) try{await fetch(`${API}/core/tasks/${task.id}/unlock`,{method:'POST',headers:{'Authorization':'Bearer '+tok}});}catch(e){}
-  clearInterval(timerIv);task=null;
-  hide('taskSec');show('empty');
-  document.getElementById('getBtn').disabled=false;
-  document.getElementById('getBtn').textContent='Get Next Task';
-}
+  // ─── REVIEW ──────────────────────────────────────────────────────────────
+  // Бэк НЕ поддерживает фильтр по projectId в /reviews/next
+  // Просто переходим на review.html — там кнопка "Load Next"
+  function goToReview() {
+    location.href = 'review.html';
+  }
 
-function nextTask(){hide('doneState');show('empty');document.getElementById('getBtn').disabled=false;document.getElementById('getBtn').textContent='Get Next Task';getTask();}
-
-function showMsg(type,msg){const b=document.getElementById('msg');b.className='alert '+(type==='err'?'a-err':type==='ok'?'a-ok':'a-info');b.textContent=(type==='err'?'⚠ ':'ℹ ')+msg;}
+  loadProjects();
 </script>
 </body>
 </html>

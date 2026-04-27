@@ -3,7 +3,7 @@ $root = "C:\Warn\Diplom\datacrowd-lab"
 $outputDir = "C:\Warn\Diplom\_export"
 $maxFileSizeKB = 500
 
-$allowedExtensions = @(".java", ".kt", ".go", ".sql", ".yml", ".yaml", ".xml", ".md", ".json", ".properties", ".env", ".dockerfile")
+$allowedExtensions = @(".java", ".kt",".html",".css",".conf", ".go", ".sql", ".yml", ".yaml", ".xml", ".md", ".json", ".properties", ".env", ".dockerfile")
 $specialFiles = @("Dockerfile", "docker-compose.yml", "Makefile", ".env", "go.mod", "go.sum", "pom.xml")
 $excludeFolders = @("target", ".git", "node_modules", ".idea", "__pycache__", ".gradle", "build", ".mvn")
 

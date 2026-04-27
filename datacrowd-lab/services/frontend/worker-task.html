@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>DataCrowd Lab – Task</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<nav>
+  <a href="worker.html" class="nav-logo">🏷 DataCrowd Lab</a>
+  <div class="nav-r">
+    <span class="chip">WORKER</span>
+    <span class="nav-name" id="uname"></span>
+    <a href="worker.html" class="btn btn-g btn-sm">← Projects</a>
+    <button class="btn btn-g btn-sm" onclick="logout()">Logout</button>
+  </div>
+</nav>
+
+<div class="wrap-sm">
+  <div class="ph">
+    <div>
+      <div class="ptitle" id="projectName">Loading...</div>
+      <div class="psub" id="projectMeta">—</div>
+    </div>
+    <a href="worker.html" class="btn btn-o btn-sm">← All Projects</a>
+  </div>
+
+  <!-- Instructions card -->
+  <div id="instructionCard" class="card hide" style="margin-bottom:14px;border-left:3px solid var(--p)">
+    <div style="font-size:11px;font-weight:600;color:var(--p);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">📋 Instructions</div>
+    <div id="instructionText" style="font-size:14px;line-height:1.7;color:var(--tx)"></div>
+  </div>
+
+  <div id="msgBox" class="hide"></div>
+
+  <!-- Empty state -->
+  <div id="emptyState" class="card tc" style="padding:60px 40px">
+    <div style="font-size:48px;margin-bottom:14px">📋</div>
+    <div style="font-size:18px;font-weight:600;margin-bottom:8px">Ready to start?</div>
+    <div style="font-size:14px;color:var(--ts);margin-bottom:22px">
+      Get your next task from this project and start labeling
+    </div>
+    <button class="btn btn-p" id="getBtn" onclick="getTask()" style="min-width:200px;font-size:15px">
+      Get Next Task →
+    </button>
+    <div style="margin-top:16px">
+      <a href="worker.html" style="font-size:13px;color:var(--ts)">← Choose a different project</a>
+    </div>
+  </div>
+
+  <!-- Active task -->
+  <div id="taskState" class="hide">
+
+    <!-- Timer card -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--p);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Active Task</div>
+          <div style="font-size:12px;color:var(--ts)">ID: <span id="taskIdDisp" style="font-family:monospace"></span></div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:11px;color:var(--ts);margin-bottom:2px">Time spent</div>
+          <div id="timerDisp" style="font-size:24px;font-weight:700;color:var(--p);font-variant-numeric:tabular-nums">0:00</div>
+        </div>
+      </div>
+      <div class="pbar"><div class="pfill" id="timerBar" style="width:0%;transition:width 1s linear"></div></div>
+      <div style="font-size:11px;color:var(--tm);margin-top:4px">Minimum time before you can submit</div>
+    </div>
+
+    <!-- Task content -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="font-size:11px;font-weight:600;color:var(--ts);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px">Content to Label</div>
+
+      <!-- Image -->
+      <div id="imageArea" class="hide" style="margin-bottom:14px;text-align:center">
+        <img id="taskImage" src="" alt="Task image"
+             style="max-width:100%;max-height:400px;border-radius:var(--rs);border:1px solid var(--bd)">
+      </div>
+
+      <div id="taskContent" style="background:var(--bg);border:1px solid var(--bd);border-radius:var(--rs);padding:18px;font-size:15px;line-height:1.7">—</div>
+    </div>
+
+    <!-- Answer input -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="font-size:15px;font-weight:600;margin-bottom:4px">Your Answer</div>
+      <div style="font-size:13px;color:var(--ts);margin-bottom:14px" id="answerHint">Type your label or answer below</div>
+
+      <!-- AI suggestion -->
+      <div id="aiSuggestion" class="hide" style="margin-bottom:12px;padding:8px 12px;background:var(--pl);border-radius:var(--rs);font-size:13px;color:var(--p)">
+        🤖 AI suggests: <strong id="aiLabel"></strong> (<span id="aiConf"></span>)
+        <button onclick="useAiSuggestion()" style="margin-left:10px;font-size:12px;color:var(--p);text-decoration:underline;background:none;border:none;cursor:pointer">Use this</button>
+      </div>
+
+      <textarea id="answerInput" class="ta" placeholder="Enter your answer..." style="min-height:80px" oninput="onAnswerInput()"></textarea>
+    </div>
+
+    <!-- Actions -->
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-o" style="flex:1" onclick="releaseTask()">↩ Release Task</button>
+      <button id="submitBtn" class="btn btn-p" style="flex:2;justify-content:center" disabled onclick="submitTask()">
+        Submit Answer →
+      </button>
+    </div>
+    <div style="text-align:center;margin-top:8px;font-size:12px;color:var(--tm)">
+      "Release Task" returns it to queue without penalty
+    </div>
+  </div>
+
+  <!-- Done state -->
+  <div id="doneState" class="hide card tc" style="padding:44px">
+    <div style="font-size:48px;margin-bottom:12px">🎉</div>
+    <div style="font-size:18px;font-weight:600;margin-bottom:8px">Task Submitted!</div>
+    <div style="font-size:14px;color:var(--ts);margin-bottom:6px" id="pointsMsg"></div>
+    <div style="font-size:13px;color:var(--tm);margin-bottom:24px">Points awarded after reviewer approves your answer</div>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+      <button class="btn btn-p" onclick="getTask()">Next Task →</button>
+      <a href="stats.html" class="btn btn-o">📊 My Stats</a>
+      <a href="worker.html" class="btn btn-g">← All Projects</a>
+    </div>
+  </div>
+</div>
+
+<script>
+  const API = 'http://localhost:8080/api';
+  const tok = localStorage.token;
+  if (!tok) location.href = 'index.html';
+  document.getElementById('uname').textContent = localStorage.uname || '';
+  function logout() { localStorage.clear(); location.href = 'index.html'; }
+  const H = () => ({ 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json' });
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const show = id => document.getElementById(id).classList.remove('hide');
+  const hide = id => document.getElementById(id).classList.add('hide');
+
+  const params = new URLSearchParams(window.location.search);
+  const projectId = params.get('projectId');
+  if (!projectId) location.href = 'worker.html';
+
+  let task = null, lockTime = null, timerIv = null, aiSuggestedLabel = null;
+
+  // ── Load project info (name + instructions) ───────────────────────────────
+  async function loadProjectInfo() {
+    try {
+      const r = await fetch(`${API}/core/projects/${projectId}/public`, { headers: H() });
+      if (!r.ok) return;
+      const p = await r.json();
+
+      // Название проекта — перезаписываем то что было из localStorage
+      if (p.name) {
+        document.getElementById('projectName').textContent = p.name;
+      }
+
+      // Тип данных сохраняем для подсказок
+      if (p.dataType) {
+        localStorage.setItem('workerProjectDataType', p.dataType);
+      }
+
+      // Инструкции из описания проекта
+      if (p.description && p.description.trim()) {
+        document.getElementById('instructionText').textContent = p.description;
+        document.getElementById('instructionCard').classList.remove('hide');
+      }
+    } catch(e) {
+      console.warn('Could not load project info:', e);
+      // Фолбек — берём из localStorage
+      document.getElementById('projectName').textContent =
+              localStorage.getItem('workerProjectName') || 'Project';
+    }
+  }
+
+  // ── Get next task ─────────────────────────────────────────────────────────
+  async function getTask() {
+    const btn = document.getElementById('getBtn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Loading...'; }
+    clearMsg();
+    try {
+      const r = await fetch(`${API}/core/tasks/next?projectId=${projectId}`, { headers: H() });
+
+      if (r.status === 204 || r.status === 404) {
+        showMsg('info', 'No more tasks available in this project right now!');
+        if (btn) { btn.disabled = false; btn.textContent = 'Get Next Task →'; }
+        return;
+      }
+      if (r.status === 403) {
+        showMsg('err', 'Your trust score is too low to receive tasks.');
+        if (btn) { btn.disabled = false; btn.textContent = 'Get Next Task →'; }
+        return;
+      }
+      if (r.status === 409) {
+        const err = await r.json().catch(()=>({}));
+        showMsg('info', err.detail || 'You already have a locked task. Finish it first.');
+        if (btn) { btn.disabled = false; btn.textContent = 'Get Next Task →'; }
+        return;
+      }
+      if (!r.ok) {
+        const err = await r.json().catch(()=>({}));
+        throw new Error(err.detail || err.message || `Error ${r.status}`);
+      }
+
+      const t = await r.json();
+      if (!t || !t.id) {
+        showMsg('info', 'No tasks available right now.');
+        if (btn) { btn.disabled = false; btn.textContent = 'Get Next Task →'; }
+        return;
+      }
+
+      // Lock the task
+      const lr = await fetch(`${API}/core/tasks/${t.id}/lock`, { method: 'POST', headers: H() });
+      if (!lr.ok && lr.status !== 409) {
+        const le = await lr.json().catch(()=>({}));
+        throw new Error(le.detail || le.message || 'Could not lock task');
+      }
+
+      // Fetch fresh task data
+      const tr = await fetch(`${API}/core/tasks/${t.id}`, { headers: H() });
+      task = tr.ok ? await tr.json() : t;
+      renderTask(task);
+
+    } catch(e) {
+      showMsg('err', e.message);
+      if (btn) { btn.disabled = false; btn.textContent = 'Get Next Task →'; }
+    }
+  }
+
+  // ── Render task ───────────────────────────────────────────────────────────
+  async function loadTaskImage(taskId) {
+    try {
+      const r = await fetch(`${API}/core/tasks/${taskId}/asset`, { headers: H() });
+      if (!r.ok) { hide('imageArea'); return; }
+      const blob = await r.blob();
+      const img = document.getElementById('taskImage');
+      img.src = URL.createObjectURL(blob);
+      img.onload = () => show('imageArea');
+      img.onerror = () => hide('imageArea');
+      show('imageArea');
+    } catch(e) {
+      hide('imageArea');
+      console.warn('Image load failed:', e);
+    }
+  }
+  function renderTask(t) {
+    hide('emptyState');
+    hide('doneState');
+    show('taskState');
+
+    // Reset input
+    document.getElementById('answerInput').value = '';
+    document.getElementById('submitBtn').disabled = true;
+    hide('aiSuggestion');
+    aiSuggestedLabel = null;
+
+    document.getElementById('taskIdDisp').textContent = String(t.id).substring(0,8) + '...';
+
+    // Сбрасываем таймер при каждой новой задаче
+    clearInterval(timerIv);
+    lockTime = Date.now();
+    document.getElementById('timerDisp').textContent = '0:00';
+    document.getElementById('timerBar').style.width = '0%';
+    startTimer();
+
+    // Parse payload
+    let content = 'No content available';
+    let dtype = (localStorage.getItem('workerProjectDataType') || 'TEXT').toUpperCase();
+    let imageUrl = null;
+
+    try {
+      const payload = JSON.parse(t.payloadJson || '{}');
+
+      const rawFmt = (payload.format || payload.type || payload.dataType || '').toUpperCase();
+      if (rawFmt && !['CSV','JSONL','MANIFEST-JSONL'].includes(rawFmt)) dtype = rawFmt;
+
+      content = payload.text || payload.content || payload.description || '';
+      if (!content && payload.data) {
+        content = payload.data.text || payload.data.content || JSON.stringify(payload.data, null, 2);
+      }
+      if (!content) content = JSON.stringify(payload, null, 2);
+
+      const pd = payload.data || {};
+      imageUrl = payload.url
+              || payload.imageUrl
+              || payload.image_url
+              || payload.filePath
+              || payload.assetRelPath
+              || payload.file
+              || pd.file
+              || pd.url
+              || pd.imageUrl
+              || pd.image_url
+              || pd.filePath
+              || pd.assetRelPath
+              || null;
+
+      if (payload.aiSuggestedLabel) {
+        aiSuggestedLabel = payload.aiSuggestedLabel;
+        document.getElementById('aiLabel').textContent = payload.aiSuggestedLabel;
+        document.getElementById('aiConf').textContent = payload.aiConfidence
+                ? Math.round(payload.aiConfidence * 100) + '%' : '';
+        show('aiSuggestion');
+      }
+    } catch(e) {
+      content = t.payloadJson || 'Content not available';
+    }
+
+    hide('imageArea');
+    if (imageUrl || dtype === 'IMAGE') {
+      loadTaskImage(t.id);
+    }
+
+    document.getElementById('taskContent').textContent = content;
+
+    const hints = {
+      TEXT:  'Type your label (e.g. positive, negative, neutral)',
+      IMAGE: 'Describe or label what you see (e.g. cat, dog, yes, no)',
+      CODE:  'Label the code quality (e.g. correct, incorrect, partial)',
+      MATH:  'Label the expression (e.g. correct, incorrect, undefined)',
+      AUDIO: 'Label the audio (e.g. clear, noisy, silent)',
+    };
+    document.getElementById('answerHint').textContent = hints[dtype] || 'Type your answer below';
+  }
+
+  function useAiSuggestion() {
+    if (aiSuggestedLabel) {
+      document.getElementById('answerInput').value = aiSuggestedLabel;
+      document.getElementById('submitBtn').disabled = false;
+    }
+  }
+
+  function onAnswerInput() {
+    const val = document.getElementById('answerInput').value.trim();
+    document.getElementById('submitBtn').disabled = !val;
+  }
+
+  function startTimer() {
+    timerIv = setInterval(() => {
+      const s = Math.floor((Date.now() - lockTime) / 1000);
+      const m = Math.floor(s / 60);
+      document.getElementById('timerDisp').textContent = `${m}:${String(s%60).padStart(2,'0')}`;
+      document.getElementById('timerBar').style.width = Math.min(s / 30 * 100, 100) + '%';
+    }, 1000);
+  }
+
+  // ── Submit ────────────────────────────────────────────────────────────────
+  async function submitTask() {
+    if (!task) return;
+    const answerVal = document.getElementById('answerInput').value.trim();
+    if (!answerVal) { showMsg('err', 'Please enter an answer.'); return; }
+
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.textContent = 'Submitting...';
+
+    try {
+      const answerPayload = JSON.stringify({ value: answerVal, source: 'frontend' });
+
+      const r = await fetch(`${API}/core/tasks/${task.id}/submit`, {
+        method: 'POST',
+        headers: H(),
+        body: JSON.stringify({ answerJson: answerPayload })
+      });
+
+      if (!r.ok) {
+        const err = await r.json().catch(()=>({}));
+        console.error('Submit error:', JSON.stringify(err));
+        throw new Error(err.detail || err.message || err.error || `Error ${r.status}`);
+      }
+
+      const d = await r.json();
+      clearInterval(timerIv);
+      task = null;
+      hide('taskState');
+      show('doneState');
+      const pts = d.pointsAwarded || 0;
+      document.getElementById('pointsMsg').textContent =
+              pts > 0 ? `+${pts} points earned!` : 'Submitted successfully!';
+
+    } catch(e) {
+      showMsg('err', e.message);
+      btn.disabled = false;
+      btn.textContent = 'Submit Answer →';
+    }
+  }
+
+  // ── Release ───────────────────────────────────────────────────────────────
+  async function releaseTask() {
+    if (!task) return;
+    if (!confirm('Release this task? It will return to the queue.')) return;
+    try {
+      await fetch(`${API}/core/tasks/${task.id}/unlock`, { method: 'POST', headers: H() });
+    } catch(e) {}
+    clearInterval(timerIv);
+    task = null;
+    hide('taskState');
+    show('emptyState');
+    const btn = document.getElementById('getBtn');
+    btn.disabled = false;
+    btn.textContent = 'Get Next Task →';
+  }
+
+  function showMsg(type, msg) {
+    const b = document.getElementById('msgBox');
+    b.className = 'alert ' + (type==='err' ? 'a-err' : type==='ok' ? 'a-ok' : 'a-info');
+    b.textContent = (type==='err' ? '⚠ ' : type==='ok' ? '✓ ' : 'ℹ ') + msg;
+  }
+  function clearMsg() { document.getElementById('msgBox').className = 'hide'; }
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+  loadProjectInfo();  // передаём projectId через замыкание (он уже объявлен выше)
+</script>
+</body>
+</html>

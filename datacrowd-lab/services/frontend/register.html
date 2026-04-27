@@ -1,19 +1,41 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DataCrowd Lab — Register</title>
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>DataCrowd Lab — Register</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="auth-pg">
   <div class="auth-box">
     <div class="auth-logo">🏷 DataCrowd Lab</div>
     <div class="auth-title">Create account</div>
-    <div class="auth-sub">Join as a data labeling worker and start earning points</div>
+    <div class="auth-sub">Choose your role to get started</div>
 
     <div id="err" class="alert a-err hide"></div>
-    <div id="ok" class="alert a-ok hide"></div>
+
+    <!-- Role selector -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px">
+      <div id="roleWorker" onclick="setRole('WORKER')"
+           style="padding:14px;border:2px solid var(--p);border-radius:var(--rs);cursor:pointer;text-align:center;background:var(--pl)">
+        <div style="font-size:22px;margin-bottom:4px">👷</div>
+        <div style="font-weight:600;font-size:13px">Worker</div>
+        <div style="font-size:11px;color:var(--ts)">Complete tasks & earn points</div>
+      </div>
+      <div id="roleClient" onclick="setRole('CLIENT')"
+           style="padding:14px;border:2px solid var(--bd);border-radius:var(--rs);cursor:pointer;text-align:center;background:var(--bg)">
+        <div style="font-size:22px;margin-bottom:4px">💼</div>
+        <div style="font-weight:600;font-size:13px">Client</div>
+        <div style="font-size:11px;color:var(--ts)">Create projects & get data labeled</div>
+      </div>
+    </div>
+
+    <!-- Admin key (only for Client) -->
+    <div id="adminKeyGroup" class="fg hide">
+      <label class="lbl">Admin Key</label>
+      <input id="adminKey" class="inp" type="password" placeholder="Enter admin key to register as client">
+      <div class="hint">Contact administrator to get the key</div>
+    </div>
 
     <div class="fg">
       <label class="lbl">Username</label>
@@ -27,43 +49,66 @@
       <label class="lbl">Password</label>
       <input id="pwd" type="password" class="inp" placeholder="Min 8 characters">
     </div>
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
       <input type="checkbox" id="agree" style="width:15px;height:15px;accent-color:#6366f1" checked>
-      <label for="agree" style="font-size:13px;color:#6b7280;">I agree to the <a href="#" class="alink">Terms of Service</a></label>
+      <label for="agree" style="font-size:13px;color:#6b7280">I agree to the <a href="#" class="alink">Terms of Service</a></label>
     </div>
 
     <button id="btn" class="btn btn-p btn-full" onclick="register()">Create Account</button>
-
     <hr class="div">
     <div class="auth-foot">Already have account? <a href="index.html" class="alink">Sign in</a></div>
   </div>
 </div>
 <script>
-const API='http://localhost:8080/api';
-async function register(){
-  const btn=document.getElementById('btn');
-  const uname=document.getElementById('uname').value.trim();
-  const email=document.getElementById('email').value.trim();
-  const pwd=document.getElementById('pwd').value;
-  const agreed=document.getElementById('agree').checked;
-  document.getElementById('err').classList.add('hide');
-  if(!uname||!email||!pwd){showErr('Fill in all fields');return;}
-  if(pwd.length<8){showErr('Password must be at least 8 characters');return;}
-  if(!agreed){showErr('Please agree to Terms of Service');return;}
-  btn.disabled=true;btn.innerHTML='<span class="spin"></span> Creating...';
-  try{
-    const r=await fetch(`${API}/auth/register`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:uname,email,password:pwd})});
-    const d=await r.json();
-    if(!r.ok) throw new Error(d.message||'Registration failed');
-    localStorage.setItem('token',d.token);
-    localStorage.setItem('role',d.role||'WORKER');
-    localStorage.setItem('userId',d.userId);
-    localStorage.setItem('uname',uname);
-    window.location.href='worker.html';
-  }catch(ex){showErr(ex.message);btn.disabled=false;btn.textContent='Create Account';}
-}
-function showErr(m){const el=document.getElementById('err');el.textContent='⚠ '+m;el.classList.remove('hide');}
-document.addEventListener('keydown',ev=>{if(ev.key==='Enter')register();});
+  const API='http://localhost:8080/api';
+  let selectedRole='WORKER';
+
+  function setRole(r){
+    selectedRole=r;
+    document.getElementById('roleWorker').style.borderColor=r==='WORKER'?'var(--p)':'var(--bd)';
+    document.getElementById('roleWorker').style.background=r==='WORKER'?'var(--pl)':'var(--bg)';
+    document.getElementById('roleClient').style.borderColor=r==='CLIENT'?'var(--p)':'var(--bd)';
+    document.getElementById('roleClient').style.background=r==='CLIENT'?'var(--pl)':'var(--bg)';
+    document.getElementById('adminKeyGroup').classList.toggle('hide', r!=='CLIENT');
+  }
+
+  async function register(){
+    const btn=document.getElementById('btn');
+    const uname=document.getElementById('uname').value.trim();
+    const email=document.getElementById('email').value.trim();
+    const pwd=document.getElementById('pwd').value;
+    const agreed=document.getElementById('agree').checked;
+    const adminKey=document.getElementById('adminKey').value.trim();
+    document.getElementById('err').classList.add('hide');
+
+    if(!uname||!email||!pwd){showErr('Fill in all fields');return;}
+    if(pwd.length<8){showErr('Password must be at least 8 characters');return;}
+    if(!agreed){showErr('Please agree to Terms of Service');return;}
+    if(selectedRole==='CLIENT'&&!adminKey){showErr('Admin key is required to register as Client');return;}
+
+    btn.disabled=true;btn.innerHTML='<span class="spin"></span> Creating...';
+    try{
+      let url, body, headers={'Content-Type':'application/json'};
+      if(selectedRole==='CLIENT'){
+        url=`${API}/auth/register-client`;
+        headers['X-Admin-Key']=adminKey;
+        body=JSON.stringify({username:uname,email,password:pwd});
+      } else {
+        url=`${API}/auth/register`;
+        body=JSON.stringify({username:uname,email,password:pwd});
+      }
+      const r=await fetch(url,{method:'POST',headers,body});
+      const d=await r.json();
+      if(!r.ok) throw new Error(d.message||'Registration failed');
+      localStorage.setItem('token',d.token);
+      localStorage.setItem('role',d.role||selectedRole);
+      localStorage.setItem('userId',d.userId);
+      localStorage.setItem('uname',uname);
+      window.location.href=selectedRole==='CLIENT'?'dashboard.html':'worker.html';
+    }catch(ex){showErr(ex.message);btn.disabled=false;btn.textContent='Create Account';}
+  }
+  function showErr(m){const el=document.getElementById('err');el.textContent='⚠ '+m;el.classList.remove('hide');}
+  document.addEventListener('keydown',ev=>{if(ev.key==='Enter')register();});
 </script>
 </body>
 </html>

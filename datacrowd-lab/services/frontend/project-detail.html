@@ -21,7 +21,6 @@
   </div>
   <div id="content" class="hide">
 
-    <!-- Header -->
     <div class="ph">
       <div>
         <div class="ptitle" id="pName">—</div>
@@ -32,17 +31,29 @@
 
     <div id="msg" class="hide"></div>
 
-    <!-- Progress card -->
+    <!-- Generate CTA — shown when PAID + dataset found + 0 tasks -->
+    <div id="generateCta" class="hide card" style="margin-bottom:14px;border:2px solid var(--p);text-align:center;padding:28px">
+      <div style="font-size:36px;margin-bottom:10px">⚡</div>
+      <div style="font-size:18px;font-weight:700;margin-bottom:8px">Ready to generate tasks!</div>
+      <div style="font-size:13px;color:var(--ts);margin-bottom:20px">
+        Your project is paid and dataset is uploaded. Click to start.
+      </div>
+      <button id="generateBtn" class="btn btn-p" style="min-width:220px;font-size:15px;padding:14px 28px" onclick="generateTasks()">
+        ⚡ Generate Tasks Now
+      </button>
+      <div id="generateStatus" style="margin-top:12px;font-size:13px;color:var(--ts)"></div>
+    </div>
+
+    <!-- Progress -->
     <div class="card" style="margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
         <div class="ctitle" style="margin-bottom:0">Dataset Progress</div>
-        <div id="sseStatus" style="font-size:12px;color:var(--ts)">Polling...</div>
+        <div id="pollStatus" style="font-size:12px;color:var(--ts)">Loading...</div>
       </div>
-      <div class="prow">
-        <span id="progressLbl">Progress</span>
-        <span id="progressPct">0%</span>
+      <div class="prow"><span>Progress</span><span id="progressPct">0%</span></div>
+      <div class="pbar" style="height:10px">
+        <div class="pfill" id="progressBar" style="width:0%"></div>
       </div>
-      <div class="pbar" style="height:10px"><div class="pfill" id="progressBar" style="width:0%"></div></div>
       <div class="srow mt8">
         <div class="sbox"><div class="slbl">Total Tasks</div><div class="sval" id="totalTasks">—</div></div>
         <div class="sbox"><div class="slbl">Completed</div><div class="sval" id="doneTasks">—</div></div>
@@ -50,7 +61,13 @@
       </div>
     </div>
 
-    <!-- Project info -->
+    <!-- Dataset info -->
+    <div id="datasetCard" class="card hide" style="margin-bottom:14px">
+      <div class="ctitle">Dataset</div>
+      <div id="datasetContent" style="margin-top:12px"></div>
+    </div>
+
+    <!-- Project settings -->
     <div class="card" style="margin-bottom:14px">
       <div class="ctitle">Project Settings</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
@@ -59,7 +76,7 @@
           <div style="font-weight:600" id="pType">—</div>
         </div>
         <div style="background:var(--bg);border-radius:var(--rs);padding:12px">
-          <div style="font-size:11px;color:var(--ts);margin-bottom:3px">Reviewers</div>
+          <div style="font-size:11px;color:var(--ts);margin-bottom:3px">Reviewers per Task</div>
           <div style="font-weight:600" id="pReviewers">—</div>
         </div>
         <div style="background:var(--bg);border-radius:var(--rs);padding:12px">
@@ -78,9 +95,9 @@
       <div class="ctitle">Actions</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
         <button id="payBtn" class="btn btn-p hide" onclick="goPayment()">💳 Pay & Activate</button>
-        <button class="btn btn-o" onclick="exportData()">📥 Export Results (JSONL)</button>
-        <button class="btn btn-o" onclick="exportCsv()">📥 Export Results (CSV)</button>
-        <a href="dashboard.html" class="btn btn-g">← Back to Dashboard</a>
+        <button class="btn btn-o" onclick="doExport('jsonl')">📥 Export JSONL</button>
+        <button class="btn btn-o" onclick="doExport('csv')">📥 Export CSV</button>
+        <a href="dashboard.html" class="btn btn-g">← Dashboard</a>
       </div>
     </div>
 
@@ -88,106 +105,213 @@
 </div>
 
 <script>
-const API='http://localhost:8080/api';
-const tok=localStorage.token;
-if(!tok) location.href='index.html';
-document.getElementById('uname').textContent=localStorage.uname||'';
-function logout(){localStorage.clear();location.href='index.html';}
-const H=()=>({'Authorization':'Bearer '+tok,'Content-Type':'application/json'});
-const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+const API = 'http://localhost:8080/api';
+const tok = localStorage.token;
+if (!tok) location.href = 'index.html';
+document.getElementById('uname').textContent = localStorage.uname || '';
+function logout() { localStorage.clear(); location.href = 'index.html'; }
+const H = () => ({ 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json' });
+const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
 
-const id=new URLSearchParams(location.search).get('id');
-if(!id) location.href='dashboard.html';
+const id = new URLSearchParams(location.search).get('id');
+if (!id) location.href = 'dashboard.html';
 
-let proj=null;
-let sseSource=null;
+let proj = null;
+let currentDatasetId = null;
+let pollIv = null;
 
-async function load(){
-  try{
-    const r=await fetch(`${API}/core/projects/${id}`,{headers:H()});
-    if(r.status===401){logout();return;}
-    proj=await r.json();
+async function load() {
+  try {
+    const r = await fetch(`${API}/core/projects/${id}`, { headers: H() });
+    if (r.status === 401) { logout(); return; }
+    proj = await r.json();
     document.getElementById('loading').classList.add('hide');
     document.getElementById('content').classList.remove('hide');
     render(proj);
-    startSSE();
-  }catch(e){
-    document.getElementById('loading').innerHTML=`<div class="alert a-err">Failed to load: ${e.message}</div>`;
+    await loadDatasets();
+    startPolling();
+  } catch(e) {
+    document.getElementById('loading').innerHTML =
+      `<div class="alert a-err">Failed to load: ${esc(e.message)}</div>`;
   }
 }
 
-function render(p){
-  document.getElementById('pName').textContent=p.name;
-  document.getElementById('pMeta').textContent=(p.dataType||'TEXT')+' · Created '+new Date(p.createdAt).toLocaleDateString();
-  const comp=(p.progress||0)>=100||p.status==='COMPLETED';
-  const paid=p.billingStatus==='PAID';
-  document.getElementById('pBadge').className='badge '+(comp?'b-done':paid?'b-active':'b-unpaid');
-  document.getElementById('pBadge').textContent=comp?'Completed':paid?'Active':'Unpaid';
-  document.getElementById('pType').textContent=p.dataType||'TEXT';
-  document.getElementById('pReviewers').textContent=(p.reviewersCount||1)+' per task';
-  document.getElementById('pReward').textContent=(p.rewardPoints||0)+' pts';
-  document.getElementById('pBilling').textContent=p.billingStatus||'UNPAID';
-  document.getElementById('pBilling').style.color=paid?'var(--ok)':'var(--err)';
-  updateProgress(p.progress||0,p.completedTasks||0,p.totalTasks||0);
-  if(!paid) document.getElementById('payBtn').classList.remove('hide');
+function render(p) {
+  document.getElementById('pName').textContent = p.name;
+  document.getElementById('pMeta').textContent =
+    (p.dataType||'TEXT') + ' · Created ' + new Date(p.createdAt).toLocaleDateString();
+  const comp = (p.progress||0) >= 100 || p.status === 'COMPLETED';
+  const paid = p.billingStatus === 'PAID';
+  document.getElementById('pBadge').className = 'badge ' + (comp?'b-done':paid?'b-active':'b-unpaid');
+  document.getElementById('pBadge').textContent = comp ? 'Completed' : paid ? 'Active' : 'Unpaid';
+  document.getElementById('pType').textContent = p.dataType || 'TEXT';
+  document.getElementById('pReviewers').textContent = (p.reviewersCount||1) + ' per task';
+  document.getElementById('pReward').textContent = (p.rewardPoints||0) + ' pts';
+  document.getElementById('pBilling').textContent = p.billingStatus || 'UNPAID';
+  document.getElementById('pBilling').style.color = paid ? 'var(--ok)' : 'var(--err)';
+  updateProgress(p.progress||0, p.completedTasks||0, p.totalTasks||0);
+  if (!paid) document.getElementById('payBtn').classList.remove('hide');
 }
 
-function updateProgress(pct,done,total){
-  document.getElementById('progressPct').textContent=pct+'%';
-  document.getElementById('progressBar').style.width=pct+'%';
-  document.getElementById('progressBar').className='pfill'+(pct>=100?' ok':'');
-  document.getElementById('totalTasks').textContent=total;
-  document.getElementById('doneTasks').textContent=done;
-  document.getElementById('leftTasks').textContent=Math.max(0,total-done);
+function updateProgress(pct, done, total) {
+  document.getElementById('progressPct').textContent = pct + '%';
+  document.getElementById('progressBar').style.width = pct + '%';
+  document.getElementById('progressBar').className = 'pfill' + (pct >= 100 ? ' ok' : '');
+  document.getElementById('totalTasks').textContent = total;
+  document.getElementById('doneTasks').textContent = done;
+  document.getElementById('leftTasks').textContent = Math.max(0, total - done);
+  if (total > 0) document.getElementById('generateCta').classList.add('hide');
 }
 
-function startSSE(){
-  if(sseSource) sseSource.close();
-  try{
-    sseSource=new EventSource(`${API}/core/projects/${id}/progress/stream`,{headers:{}});
-    // SSE doesn't support custom headers natively — use polling fallback
-    sseSource.onerror=()=>{ sseSource.close(); startPolling(); };
-    sseSource.addEventListener('progress',e=>{
-      const d=JSON.parse(e.data);
-      updateProgress(d.progress,d.completed,d.total);
-      document.getElementById('sseStatus').textContent='Live ●';
-      document.getElementById('sseStatus').style.color='var(--ok)';
-      if(d.status==='COMPLETED') sseSource.close();
+// Load datasets from API — no localStorage dependency
+async function loadDatasets() {
+  try {
+    const r = await fetch(`${API}/core/projects/${id}/datasets`, { headers: H() });
+    if (!r.ok) return;
+    const data = await r.json();
+    const list = Array.isArray(data) ? data : (data.content || []);
+    if (!list.length) return;
+
+    // Use the most recent dataset
+    const ds = list.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+    currentDatasetId = ds.id;
+
+    // Show dataset card
+    const statusColor = ds.status==='READY' ? 'var(--ok)' : ds.status==='FAILED' ? 'var(--err)' : 'var(--p)';
+    document.getElementById('datasetCard').classList.remove('hide');
+    document.getElementById('datasetContent').innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:var(--bg);border-radius:var(--rs);padding:10px">
+          <div style="font-size:11px;color:var(--ts);margin-bottom:3px">File</div>
+          <div style="font-weight:600;font-size:13px">${esc(ds.sourcePath?.split('/').pop()||ds.name||'dataset')}</div>
+        </div>
+        <div style="background:var(--bg);border-radius:var(--rs);padding:10px">
+          <div style="font-size:11px;color:var(--ts);margin-bottom:3px">Status</div>
+          <div style="font-weight:600;color:${statusColor}">${ds.status||'—'}</div>
+        </div>
+        <div style="background:var(--bg);border-radius:var(--rs);padding:10px">
+          <div style="font-size:11px;color:var(--ts);margin-bottom:3px">Total Items</div>
+          <div style="font-weight:600">${ds.totalItems||0}</div>
+        </div>
+        <div style="background:var(--bg);border-radius:var(--rs);padding:10px">
+          <div style="font-size:11px;color:var(--ts);margin-bottom:3px">Uploaded</div>
+          <div style="font-weight:600;font-size:12px">${ds.createdAt?new Date(ds.createdAt).toLocaleDateString():'—'}</div>
+        </div>
+      </div>`;
+
+    // Show generate CTA: PAID + no tasks + dataset uploaded/failed
+    const paid = proj && proj.billingStatus === 'PAID';
+    const noTasks = proj && (proj.totalTasks||0) === 0;
+    const needsGen = ds.status === 'UPLOADED' || ds.status === 'FAILED' || ds.status === 'GENERATING';
+    if (paid && noTasks && needsGen) {
+      document.getElementById('generateCta').classList.remove('hide');
+    }
+  } catch(e) {
+    // Endpoint might not exist yet — silently ignore
+    console.warn('loadDatasets error:', e.message);
+  }
+}
+
+async function generateTasks() {
+  if (!currentDatasetId) { showMsg('err', 'No dataset found.'); return; }
+  const btn = document.getElementById('generateBtn');
+  const st = document.getElementById('generateStatus');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> Generating...';
+  st.textContent = 'Sending request...';
+  try {
+    const r = await fetch(`${API}/core/datasets/${currentDatasetId}/generate-tasks`, {
+      method: 'POST', headers: H(),
+      body: JSON.stringify({ projectId: id })
     });
-  }catch(e){ startPolling(); }
+    if (!r.ok) {
+      const e = await r.json().catch(()=>({}));
+      throw new Error(e.detail || e.message || 'Failed (status ' + r.status + ')');
+    }
+    btn.innerHTML = '✓ Generation started!';
+    st.textContent = 'Tasks are being created. This page updates automatically.';
+    st.style.color = 'var(--ok)';
+    showMsg('ok', 'Task generation started! Progress updates every 4 seconds.');
+  } catch(e) {
+    showMsg('err', e.message);
+    btn.disabled = false;
+    btn.innerHTML = '⚡ Generate Tasks Now';
+    st.textContent = '';
+  }
 }
 
-function startPolling(){
-  document.getElementById('sseStatus').textContent='Polling every 5s';
-  setInterval(async()=>{
-    try{
-      const r=await fetch(`${API}/core/projects/${id}`,{headers:H()});
-      const p=await r.json();
-      updateProgress(p.progress||0,p.completedTasks||0,p.totalTasks||0);
-    }catch(e){}
-  },5000);
+function startPolling() {
+  if (pollIv) clearInterval(pollIv);
+  document.getElementById('pollStatus').textContent = 'Auto-refresh ●';
+  document.getElementById('pollStatus').style.color = 'var(--ok)';
+  pollIv = setInterval(async () => {
+    try {
+      const r = await fetch(`${API}/core/projects/${id}`, { headers: H() });
+      const p = await r.json();
+      updateProgress(p.progress||0, p.completedTasks||0, p.totalTasks||0);
+    } catch(e) {}
+  }, 4000);
 }
 
-function goPayment(){ location.href='payment.html?id='+id; }
+function goPayment() { location.href = 'payment.html?id=' + id; }
 
-async function exportData(){
-  try{
-    const r=await fetch(`${API}/core/exports?projectId=${id}&datasetId=&format=jsonl`,{headers:H()});
-    if(!r.ok) throw new Error('Export failed');
-    const blob=await r.blob();
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');a.href=url;a.download=`export_${id}.jsonl`;a.click();
-  }catch(e){alert('Export error: '+e.message);}
+async function doExport(fmt) {
+  if (!currentDatasetId) {
+    showMsg('err', 'No dataset found. Please upload a dataset first.');
+    return;
+  }
+
+  showMsg('info', 'Preparing export...');
+
+  try {
+    // Шаг 1: создаём экспорт (POST) — бэк возвращает { exportId, downloadUrl }
+    const r = await fetch(
+            `${API}/core/projects/${id}/export?datasetId=${currentDatasetId}&format=${fmt}`,
+            { method: 'POST', headers: H() }
+    );
+
+    if (!r.ok) {
+      const err = await r.json().catch(()=>({}));
+      throw new Error(err.detail || err.message || `Export failed (${r.status})`);
+    }
+
+    const data = await r.json();
+    const exportId = data.exportId;
+    if (!exportId) throw new Error('No exportId returned from server');
+
+    showMsg('info', 'Export ready, downloading...');
+
+    // Шаг 2: скачиваем файл (GET /core/exports/{exportId}/download)
+    const dl = await fetch(
+            `${API}/core/exports/${exportId}/download`,
+            { headers: H() }
+    );
+
+    if (!dl.ok) {
+      const err = await dl.json().catch(()=>({}));
+      throw new Error(err.detail || err.message || `Download failed (${dl.status})`);
+    }
+
+    const blob = await dl.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `export_${id}.${fmt}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+
+    showMsg('ok', `Export downloaded as export_${id}.${fmt}`);
+
+  } catch(e) {
+    showMsg('err', 'Export error: ' + e.message);
+  }
 }
 
-async function exportCsv(){
-  try{
-    const r=await fetch(`${API}/core/exports?projectId=${id}&format=csv`,{headers:H()});
-    if(!r.ok) throw new Error('Export failed');
-    const blob=await r.blob();
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');a.href=url;a.download=`export_${id}.csv`;a.click();
-  }catch(e){alert('Export error: '+e.message);}
+function showMsg(type, msg) {
+  const b = document.getElementById('msg');
+  b.className = 'alert ' + (type==='err'?'a-err': type==='ok'?'a-ok':'a-info');
+  b.textContent = (type==='err'?'⚠ ': type==='ok'?'✓ ':'ℹ ') + msg;
 }
 
 load();

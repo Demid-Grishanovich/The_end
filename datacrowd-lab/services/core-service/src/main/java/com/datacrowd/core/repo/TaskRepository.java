@@ -23,10 +23,8 @@ public interface TaskRepository extends JpaRepository<TaskEntity, UUID> {
     @Query("""
         select t
         from TaskEntity t
-        join t.batch b
         where t.status = com.datacrowd.core.entity.TaskStatus.NEW
           and t.lockedByUserId is null
-          and b.status = com.datacrowd.core.entity.BatchStatus.READY
         order by t.createdAt asc
     """)
     List<TaskEntity> findNextAvailableTasks(org.springframework.data.domain.Pageable pageable);
@@ -87,4 +85,30 @@ public interface TaskRepository extends JpaRepository<TaskEntity, UUID> {
           and t.status = com.datacrowd.core.entity.TaskStatus.APPROVED
     """)
     long countApprovedByProject(@Param("projectId") UUID projectId);
+
+    @Query("""
+        select t from TaskEntity t
+        where t.projectId = :projectId
+          and t.status = com.datacrowd.core.entity.TaskStatus.NEW
+          and t.lockedByUserId is null
+        order by t.createdAt asc
+    """)
+    List<TaskEntity> findNextAvailableByProject(
+            @Param("projectId") UUID projectId,
+            org.springframework.data.domain.Pageable pageable);
+
+    @Query("""
+        select distinct t.projectId from TaskEntity t
+        where t.status = com.datacrowd.core.entity.TaskStatus.NEW
+          and t.lockedByUserId is null
+    """)
+    List<UUID> findProjectIdsWithAvailableTasks();
+
+    @Query("""
+        select count(t) from TaskEntity t
+        where t.projectId = :projectId
+          and t.status = com.datacrowd.core.entity.TaskStatus.NEW
+          and t.lockedByUserId is null
+    """)
+    long countAvailableByProject(@Param("projectId") UUID projectId);
 }

@@ -9,10 +9,12 @@ import com.datacrowd.core.repo.ProjectRepository;
 import com.datacrowd.core.repo.ReviewRepository;
 import com.datacrowd.core.repo.TaskRepository;
 import com.datacrowd.core.repo.WorkerProfileRepository;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -53,7 +55,11 @@ public class ReviewWorkflowService {
 
     @Transactional(readOnly = true)
     public Optional<AnswerEntity> nextForReview(UUID reviewerId) {
-        return answerRepository.findNextForReview(reviewerId);
+        List<AnswerEntity> list = answerRepository.findPendingForReview(
+                reviewerId,
+                PageRequest.of(0, 1)
+        );
+        return list.isEmpty() ? Optional.empty() : Optional.of(list.get(0));
     }
 
     @Transactional

@@ -23,23 +23,25 @@ import java.util.UUID;
 @Service
 public class ExportService {
 
-    private final ExportRepository    exportRepository;
-    private final ProjectRepository   projectRepository;
-    private final DatasetRepository   datasetRepository;
-    private final AnswerRepository    answerRepository;
-    private final StorageService      storageService;
-    private final ObjectMapper        objectMapper = new ObjectMapper();
+    private final ExportRepository exportRepository;
+    private final ProjectRepository projectRepository;
+    private final DatasetRepository datasetRepository;
+    private final AnswerRepository answerRepository;
+    private final StorageService storageService;
+    private final ObjectMapper objectMapper;
 
     public ExportService(ExportRepository exportRepository,
                          ProjectRepository projectRepository,
                          DatasetRepository datasetRepository,
                          AnswerRepository answerRepository,
-                         StorageService storageService) {
-        this.exportRepository  = exportRepository;
-        this.projectRepository = projectRepository;
-        this.datasetRepository = datasetRepository;
-        this.answerRepository  = answerRepository;
-        this.storageService    = storageService;
+                         StorageService storageService,
+                         ObjectMapper objectMapper) {
+        this.exportRepository   = exportRepository;
+        this.projectRepository  = projectRepository;
+        this.datasetRepository  = datasetRepository;
+        this.answerRepository   = answerRepository;
+        this.storageService     = storageService;
+        this.objectMapper       = objectMapper;
     }
 
     @Transactional

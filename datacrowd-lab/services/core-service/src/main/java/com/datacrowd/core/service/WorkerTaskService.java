@@ -293,6 +293,22 @@ public class WorkerTaskService {
         return new SubmitResult(task, answer, awarded);
     }
 
+    @Transactional(readOnly = true)
+    public Optional<TaskEntity> nextTaskForProject(UUID workerUserId, UUID projectId) {
+        checkTrustScore(workerUserId);
+
+        Optional<TaskEntity> mine = taskRepository
+                .findFirstByLockedByUserIdAndStatus(workerUserId, TaskStatus.LOCKED);
+        if (mine.isPresent()) {
+            if (projectId.equals(mine.get().getProjectId())) return mine;
+            throw new ApiConflictException("You have a locked task in another project. Finish it first.");
+        }
+
+        var list = taskRepository.findNextAvailableByProject(projectId, PageRequest.of(0, 1));
+        return list.isEmpty() ? Optional.empty() : Optional.of(list.get(0));
+    }
+
+
     // -----------------------------------------------------------------------
     // Получить путь к файлу-ассету задачи (для стриминга картинок/аудио)
     // -----------------------------------------------------------------------
@@ -302,9 +318,19 @@ public class WorkerTaskService {
         TaskEntity task = taskRepository.findById(taskId)
                 .orElseThrow(() -> new ApiNotFoundException("Task not found: " + taskId));
 
-        if (task.getLockedByUserId() != null
-                && !task.getLockedByUserId().equals(requesterUserId)) {
-            throw new ApiForbiddenException("Task is locked by another user");
+        boolean isLockedByOther = task.getLockedByUserId() != null
+                && !task.getLockedByUserId().equals(requesterUserId);
+
+        if (isLockedByOther) {
+            // Дополнительно проверяем — может это ревьюер смотрит уже сданную задачу
+            TaskStatus s = task.getStatus();
+            boolean isReviewable = s == TaskStatus.SUBMITTED
+                    || s == TaskStatus.IN_REVIEW
+                    || s == TaskStatus.APPROVED
+                    || s == TaskStatus.REJECTED;
+            if (!isReviewable) {
+                throw new ApiForbiddenException("Task is locked by another user");
+            }
         }
 
         String payload = task.getPayloadJson();
@@ -315,10 +341,45 @@ public class WorkerTaskService {
         String rel;
         try {
             JsonNode n = objectMapper.readTree(payload);
+
+            // Сначала ищем в корне
             JsonNode v = n.get("assetRelPath");
             if (v == null || v.isNull() || v.asText().isBlank()) {
                 v = n.get("file");
             }
+            if (v == null || v.isNull() || v.asText().isBlank()) {
+                v = n.get("url");
+            }
+            if (v == null || v.isNull() || v.asText().isBlank()) {
+                v = n.get("imageUrl");
+            }
+            if (v == null || v.isNull() || v.asText().isBlank()) {
+                v = n.get("filePath");
+            }
+
+            // Если в корне не нашли — ищем внутри data{}
+            if (v == null || v.isNull() || v.asText().isBlank()) {
+                JsonNode data = n.get("data");
+                if (data != null && !data.isNull()) {
+                    v = data.get("assetRelPath");
+                    if (v == null || v.isNull() || v.asText().isBlank()) {
+                        v = data.get("file");
+                    }
+                    if (v == null || v.isNull() || v.asText().isBlank()) {
+                        v = data.get("url");
+                    }
+                    if (v == null || v.isNull() || v.asText().isBlank()) {
+                        v = data.get("imageUrl");
+                    }
+                    if (v == null || v.isNull() || v.asText().isBlank()) {
+                        v = data.get("image_url");
+                    }
+                    if (v == null || v.isNull() || v.asText().isBlank()) {
+                        v = data.get("filePath");
+                    }
+                }
+            }
+
             rel = (v == null || v.isNull()) ? null : v.asText();
         } catch (Exception e) {
             throw new ApiConflictException("Task payload is not valid JSON");

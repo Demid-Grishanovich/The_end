@@ -80,7 +80,7 @@ public class DatasetService {
     @Transactional
     public void generateTasks(UUID datasetId, UUID ownerUserId, GenerateTasksRequest req) {
         DatasetEntity d = datasetRepository.findById(datasetId)
-                .orElseThrow(() -> new IllegalArgumentException("Dataset not found"));
+                .orElseThrow(() -> new IllegalArgumentException("Dataset not found: " + datasetId));
 
         ProjectEntity p = projectRepository.findById(d.getProjectId())
                 .orElseThrow(() -> new IllegalArgumentException("Project not found"));
@@ -89,28 +89,30 @@ public class DatasetService {
             throw new IllegalStateException("Forbidden: not project owner");
         }
 
-        // Проверка оплаты/квоты (MVP согласно плану)
-        boolean paid = p.getBillingStatus() == BillingStatus.PAID;
+        // Check billing — must be paid OR have quota
+        boolean paid     = p.getBillingStatus() == BillingStatus.PAID;
         boolean hasQuota = p.getTaskQuota() != null && p.getTaskQuota() > 0;
         if (!paid && !hasQuota) {
-            throw new IllegalStateException("Project is not paid and has no task quota");
+            throw new IllegalStateException("Project is not paid. Please complete payment first.");
         }
 
         if (d.getSourcePath() == null || d.getSourcePath().isBlank()) {
-            throw new IllegalStateException("Dataset sourcePath is empty");
+            throw new IllegalStateException("Dataset has no source file uploaded.");
         }
 
         d.setStatus(DatasetStatus.GENERATING);
         datasetRepository.save(d);
 
+        // Build runner request body
         Map<String, Object> body = new HashMap<>();
-        body.put("datasetId", datasetId.toString());
-        body.put("sourcePath", d.getSourcePath());
-        body.put("sourceType", d.getSourceType() != null ? d.getSourceType().name() : null);
-        body.put("manifestPath", d.getManifestPath());
-        body.put("batchSize", req.batchSize);
-        body.put("reviewersCount", req.reviewersCount);
-        body.put("rewardPoints", req.rewardPoints);
+        body.put("datasetId",      datasetId.toString());
+        body.put("projectId",      p.getId().toString());
+        body.put("sourcePath",     d.getSourcePath());
+        body.put("sourceType",     d.getSourceType() != null ? d.getSourceType().name() : null);
+        body.put("manifestPath",   d.getManifestPath());
+        body.put("reviewersCount", p.getReviewersCount() != null ? p.getReviewersCount() : 1);
+        body.put("rewardPoints",   p.getRewardPoints()   != null ? p.getRewardPoints()   : 0);
+        // batchSize removed — runner no longer uses batches
 
         runnerClient.triggerGenerate(datasetId, body);
     }

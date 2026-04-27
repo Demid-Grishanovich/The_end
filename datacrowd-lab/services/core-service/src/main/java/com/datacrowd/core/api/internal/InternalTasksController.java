@@ -1,102 +1,73 @@
 package com.datacrowd.core.api.internal;
 
-import com.datacrowd.core.dto.internal.InternalCreateTasksBulkRequest;
-import com.datacrowd.core.entity.DatasetEntity;
-import com.datacrowd.core.entity.TaskBatchEntity;
 import com.datacrowd.core.entity.TaskEntity;
 import com.datacrowd.core.entity.TaskStatus;
 import com.datacrowd.core.repo.DatasetRepository;
-import com.datacrowd.core.repo.TaskBatchRepository;
 import com.datacrowd.core.repo.TaskRepository;
-import jakarta.validation.Valid;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 
+/**
+ * Internal API called by Go runner.
+ * POST /internal/tasks/bulk  — insert all tasks in one transaction (no N+1)
+ * PATCH /internal/datasets/{id}/total-items?value=N
+ */
 @RestController
-@RequestMapping("/internal/tasks")
+@RequestMapping("/internal")
 public class InternalTasksController {
 
-    private final TaskRepository taskRepository;
-    private final TaskBatchRepository taskBatchRepository;
+    private final TaskRepository    taskRepository;
     private final DatasetRepository datasetRepository;
 
-    public InternalTasksController(
-            TaskRepository taskRepository,
-            TaskBatchRepository taskBatchRepository,
-            DatasetRepository datasetRepository
-    ) {
-        this.taskRepository = taskRepository;
-        this.taskBatchRepository = taskBatchRepository;
+    public InternalTasksController(TaskRepository taskRepository,
+                                    DatasetRepository datasetRepository) {
+        this.taskRepository    = taskRepository;
         this.datasetRepository = datasetRepository;
     }
 
-    @PostMapping("/bulk")
-    public String bulkCreate(@Valid @RequestBody InternalCreateTasksBulkRequest req) {
-
-        if (req.tasks == null || req.tasks.isEmpty()) {
-            return "ok";
+    @PostMapping("/tasks/bulk")
+    @Transactional
+    public BulkCreateResponse createTasksBulk(@RequestBody BulkCreateRequest req) {
+        if (req.tasks() == null || req.tasks().isEmpty()) {
+            return new BulkCreateResponse(0);
         }
-
-        // 1) Собираем batchIds и грузим батчи пачкой
-        Set<UUID> batchIds = req.tasks.stream()
-                .map(t -> t.batchId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-
-        Map<UUID, TaskBatchEntity> batches = taskBatchRepository.findAllById(batchIds).stream()
-                .collect(Collectors.toMap(TaskBatchEntity::getId, b -> b));
-
-        // 2) Собираем datasetIds и грузим datasets пачкой
-        Set<UUID> datasetIds = batches.values().stream()
-                .map(TaskBatchEntity::getDatasetId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-
-        Map<UUID, DatasetEntity> datasets = datasetRepository.findAllById(datasetIds).stream()
-                .collect(Collectors.toMap(DatasetEntity::getId, d -> d));
-
-        // 3) Собираем tasks
-        List<TaskEntity> toSave = new ArrayList<>();
-        int i = 1;
-
-        for (var item : req.tasks) {
-            TaskBatchEntity batch = batches.get(item.batchId);
-            if (batch == null) {
-                // если runner прислал batchId которого нет — пропускаем
-                continue;
-            }
-
-            DatasetEntity dataset = datasets.get(batch.getDatasetId());
-            if (dataset == null) {
-                continue;
-            }
-
-            TaskEntity t = new TaskEntity();
-
-            // ✅ обязательные поля по схеме
-            t.setBatchId(item.batchId);
-            t.setDatasetId(dataset.getId());
-            t.setProjectId(dataset.getProjectId());
-            t.setTitle("Generated task #" + (i++));
-            t.setPayloadJson(item.payloadJson);
-
-            // статус — только если валидный enum
-            if (item.status != null && !item.status.isBlank()) {
-                try {
-                    t.setStatus(TaskStatus.valueOf(item.status));
-                } catch (Exception ignore) {
-                    t.setStatus(TaskStatus.NEW);
-                }
-            } else {
-                t.setStatus(TaskStatus.NEW);
-            }
-
-            toSave.add(t);
+        UUID datasetId = UUID.fromString(req.datasetId());
+        UUID projectId = req.projectId() != null && !req.projectId().isBlank()
+                ? UUID.fromString(req.projectId()) : null;
+        if (projectId == null) {
+            projectId = datasetRepository.findById(datasetId)
+                    .map(d -> d.getProjectId()).orElse(null);
         }
+        final UUID finalProjectId = projectId;
+        List<TaskEntity> entities = new ArrayList<>(req.tasks().size());
+        for (TaskItem item : req.tasks()) {
+            TaskEntity task = new TaskEntity();
+            task.setDatasetId(datasetId);
+            task.setProjectId(finalProjectId);
+            task.setPayloadJson(item.payloadJson());
+            task.setStatus(item.status() != null && !item.status().isBlank()
+                    ? TaskStatus.valueOf(item.status().toUpperCase()) : TaskStatus.NEW);
+            entities.add(task);
+        }
+        List<TaskEntity> saved = taskRepository.saveAll(entities);
+        return new BulkCreateResponse(saved.size());
+    }
 
-        taskRepository.saveAll(toSave);
+    @PatchMapping("/datasets/{id}/total-items")
+    @Transactional
+    public String updateTotalItems(@PathVariable UUID id, @RequestParam int value) {
+        datasetRepository.findById(id).ifPresent(d -> {
+            d.setTotalItems(value);
+            datasetRepository.save(d);
+        });
         return "ok";
     }
+
+    public record BulkCreateRequest(String datasetId, String projectId, List<TaskItem> tasks) {}
+    public record TaskItem(String payloadJson, String status) {}
+    public record BulkCreateResponse(int created) {}
 }

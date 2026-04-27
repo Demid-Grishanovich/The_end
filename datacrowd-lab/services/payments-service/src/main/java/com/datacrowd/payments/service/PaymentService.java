@@ -91,8 +91,8 @@ public class PaymentService {
 
         SessionCreateParams params = SessionCreateParams.builder()
                 .setMode(SessionCreateParams.Mode.PAYMENT)
-                .setSuccessUrl(successUrl)
-                .setCancelUrl(cancelUrl)
+                .setSuccessUrl(successUrl + "?success=1&projectId=" + req.getProjectId())
+                .setCancelUrl(cancelUrl + "?cancel=1&projectId=" + req.getProjectId())
                 .addLineItem(
                         SessionCreateParams.LineItem.builder()
                                 .setQuantity(1L)
