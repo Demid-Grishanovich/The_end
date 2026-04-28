@@ -3,16 +3,18 @@ package com.datacrowd.core.service;
 import com.datacrowd.core.api.ApiConflictException;
 import com.datacrowd.core.api.ApiForbiddenException;
 import com.datacrowd.core.api.ApiNotFoundException;
+import com.datacrowd.core.config.CacheConfig;
 import com.datacrowd.core.entity.*;
 import com.datacrowd.core.repo.AnswerRepository;
 import com.datacrowd.core.repo.ProjectRepository;
 import com.datacrowd.core.repo.ReviewRepository;
 import com.datacrowd.core.repo.TaskRepository;
 import com.datacrowd.core.repo.WorkerProfileRepository;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 
 import java.util.List;
 import java.util.Optional;
@@ -27,22 +29,26 @@ public class ReviewWorkflowService {
     private final ProjectRepository       projectRepository;
     private final PointsService           pointsService;
     private final WorkerProfileRepository workerProfileRepository;
+    private final AuditService            auditService;
+    private final MetricsService          metricsService;
+    private final WorkerStatsService      workerStatsService;
 
-    // Константы системы рейтинга
-    private static final int TRUST_SCORE_START   = 100; // стартовый рейтинг нового воркера
-    private static final int TRUST_SCORE_MAX     = 100; // максимум
-    private static final int TRUST_SCORE_MIN     = 0;   // минимум
-    private static final int TRUST_SCORE_PENALTY = 10;  // штраф за reject
-    private static final int TRUST_SCORE_REWARD  = 2;   // бонус за approve (растёт медленнее)
+    private static final int TRUST_SCORE_START   = 100;
+    private static final int TRUST_SCORE_MAX     = 100;
+    private static final int TRUST_SCORE_MIN     = 0;
+    private static final int TRUST_SCORE_PENALTY = 10;
+    private static final int TRUST_SCORE_REWARD  = 2;
     private static final int TRUST_SCORE_BLOCK   = 30;
-    private final AuditService auditService;
-    private final MetricsService metricsService;
+
     public ReviewWorkflowService(AnswerRepository answerRepository,
                                  ReviewRepository reviewRepository,
                                  TaskRepository taskRepository,
                                  ProjectRepository projectRepository,
                                  PointsService pointsService,
-                                 WorkerProfileRepository workerProfileRepository, AuditService auditService,MetricsService metricsService  ) {
+                                 WorkerProfileRepository workerProfileRepository,
+                                 AuditService auditService,
+                                 MetricsService metricsService,
+                                 WorkerStatsService workerStatsService) {
         this.answerRepository        = answerRepository;
         this.reviewRepository        = reviewRepository;
         this.taskRepository          = taskRepository;
@@ -50,7 +56,8 @@ public class ReviewWorkflowService {
         this.pointsService           = pointsService;
         this.workerProfileRepository = workerProfileRepository;
         this.auditService            = auditService;
-        this.metricsService = metricsService;
+        this.metricsService          = metricsService;
+        this.workerStatsService      = workerStatsService;
     }
 
     @Transactional(readOnly = true)
@@ -62,11 +69,19 @@ public class ReviewWorkflowService {
         return list.isEmpty() ? Optional.empty() : Optional.of(list.get(0));
     }
 
+    @Caching(evict = {
+            @CacheEvict(value = CacheConfig.AVAILABLE_PROJECTS, allEntries = true),
+            @CacheEvict(value = CacheConfig.MY_PROJECTS,        allEntries = true)
+    })
     @Transactional
     public DecisionResult approve(UUID answerId, UUID reviewerId, String comment) {
         return decide(answerId, reviewerId, ReviewDecision.APPROVED, comment);
     }
 
+    @Caching(evict = {
+            @CacheEvict(value = CacheConfig.AVAILABLE_PROJECTS, allEntries = true),
+            @CacheEvict(value = CacheConfig.MY_PROJECTS,        allEntries = true)
+    })
     @Transactional
     public DecisionResult reject(UUID answerId, UUID reviewerId, String comment) {
         return decide(answerId, reviewerId, ReviewDecision.REJECTED, comment);
@@ -77,7 +92,6 @@ public class ReviewWorkflowService {
                                   ReviewDecision decision,
                                   String comment) {
 
-        // 1. Загружаем ответ с задачей
         AnswerEntity answer = answerRepository.findByIdWithTask(answerId)
                 .orElseThrow(() -> new ApiNotFoundException("Answer not found: " + answerId));
 
@@ -87,7 +101,6 @@ public class ReviewWorkflowService {
                     .orElseThrow(() -> new ApiNotFoundException("Task not found: " + answer.getTaskId()));
         }
 
-        // 2. Базовые проверки
         if (answer.getUserId().equals(reviewerId)) {
             throw new ApiForbiddenException("Reviewer cannot review own answer");
         }
@@ -103,7 +116,6 @@ public class ReviewWorkflowService {
             throw new ApiConflictException("Reviewer already reviewed this answer");
         }
 
-        // 3. Сохраняем решение ревьюера
         ReviewEntity review = new ReviewEntity();
         review.setAnswerId(answerId);
         review.setReviewerId(reviewerId);
@@ -111,7 +123,6 @@ public class ReviewWorkflowService {
         review.setComment(comment);
         reviewRepository.save(review);
 
-        // 4. Загружаем проект для настроек
         UUID projectId = task.getProjectId();
         ProjectEntity project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ApiNotFoundException("Project not found: " + projectId));
@@ -119,7 +130,6 @@ public class ReviewWorkflowService {
         int required = (project.getReviewersCount() == null ? 1 : project.getReviewersCount());
         if (required < 1) required = 1;
 
-        // 5. Обрабатываем REJECT
         if (decision == ReviewDecision.REJECTED) {
             answer.setStatus(AnswerStatus.REJECTED);
             answerRepository.save(answer);
@@ -129,16 +139,16 @@ public class ReviewWorkflowService {
             task.setLockedAt(null);
             taskRepository.save(task);
 
-            // Штраф за плохую работу: -10 к рейтингу
             updateTrustScore(answer.getUserId(), -TRUST_SCORE_PENALTY);
+            // Evict cached stats for the worker whose score changed
+            workerStatsService.evictStats(answer.getUserId());
+
             auditService.log(reviewerId, AuditLogEntity.ANSWER_REJECTED, "ANSWER", answerId);
             metricsService.incrementTasksRejected();
-
 
             return new DecisionResult(answer, task, 0, 0L, required);
         }
 
-        // 6. Обрабатываем APPROVE
         long approvals = reviewRepository.countByAnswerIdAndDecision(answerId, ReviewDecision.APPROVED);
 
         int awarded = 0;
@@ -152,18 +162,16 @@ public class ReviewWorkflowService {
             int reward = (project.getRewardPoints() == null ? 0 : project.getRewardPoints());
             awarded = pointsService.awardTaskApprovedOnce(answer.getUserId(), task.getId(), reward);
 
-            // Бонус за хорошую работу: +5 к рейтингу
             updateTrustScore(answer.getUserId(), +TRUST_SCORE_REWARD);
+            // Evict cached stats for the worker whose score changed
+            workerStatsService.evictStats(answer.getUserId());
+
             auditService.log(reviewerId, AuditLogEntity.ANSWER_APPROVED, "ANSWER", answerId);
             metricsService.incrementTasksApproved();
         }
 
         return new DecisionResult(answer, task, awarded, approvals, required);
     }
-
-    // -----------------------------------------------------------------------
-    // Trust Score: универсальный метод изменения рейтинга
-    // -----------------------------------------------------------------------
 
     private void updateTrustScore(UUID workerId, int delta) {
         WorkerProfileEntity profile = workerProfileRepository.findById(workerId)
@@ -180,9 +188,6 @@ public class ReviewWorkflowService {
         workerProfileRepository.save(profile);
     }
 
-    // -----------------------------------------------------------------------
-    // Result record
-    // -----------------------------------------------------------------------
     public record DecisionResult(
             AnswerEntity answer,
             TaskEntity   task,

@@ -1,11 +1,14 @@
 package com.datacrowd.core.service;
 
+import com.datacrowd.core.config.CacheConfig;
 import com.datacrowd.core.dto.WorkerStatsResponse;
 import com.datacrowd.core.entity.AnswerStatus;
 import com.datacrowd.core.entity.WorkerProfileEntity;
 import com.datacrowd.core.repo.AnswerRepository;
 import com.datacrowd.core.repo.PointsLedgerRepository;
 import com.datacrowd.core.repo.WorkerProfileRepository;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,10 +29,9 @@ public class WorkerStatsService {
         this.pointsLedgerRepository  = pointsLedgerRepository;
     }
 
+    @Cacheable(value = CacheConfig.WORKER_STATS, key = "#workerId")
     @Transactional(readOnly = true)
     public WorkerStatsResponse getStats(UUID workerId) {
-
-        // Получаем профиль воркера — если нет, создаём в памяти со стартовым значением
         WorkerProfileEntity profile = workerProfileRepository.findById(workerId)
                 .orElseGet(() -> {
                     WorkerProfileEntity p = new WorkerProfileEntity(workerId);
@@ -48,5 +50,10 @@ public class WorkerStatsService {
                 (int) rejectedTasks,
                 totalPoints
         );
+    }
+
+    @CacheEvict(value = CacheConfig.WORKER_STATS, key = "#workerId")
+    public void evictStats(UUID workerId) {
+        // evict only — annotation does the work
     }
 }
