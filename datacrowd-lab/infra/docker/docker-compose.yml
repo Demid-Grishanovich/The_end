@@ -224,12 +224,10 @@ services:
     depends_on:
       - api-gateway
     networks:
-      - datacrowd-network
+      - datacrowd-net
 
 networks:
   datacrowd-net:
-    driver: bridge
-  datacrowd-network:
     driver: bridge
 
 volumes:

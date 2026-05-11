@@ -62,6 +62,9 @@ public class ReviewWorkflowService {
 
     @Transactional(readOnly = true)
     public Optional<AnswerEntity> nextForReview(UUID reviewerId) {
+
+        checkReviewerTrustScore(reviewerId);
+
         List<AnswerEntity> list = answerRepository.findPendingForReview(
                 reviewerId,
                 PageRequest.of(0, 1)
@@ -91,6 +94,8 @@ public class ReviewWorkflowService {
                                   UUID reviewerId,
                                   ReviewDecision decision,
                                   String comment) {
+
+        checkReviewerTrustScore(reviewerId);
 
         AnswerEntity answer = answerRepository.findByIdWithTask(answerId)
                 .orElseThrow(() -> new ApiNotFoundException("Answer not found: " + answerId));
@@ -195,4 +200,19 @@ public class ReviewWorkflowService {
             long         approvals,
             int          requiredApprovals
     ) {}
+
+    private static final int REVIEWER_MIN_TRUST_SCORE = 70;
+
+    private void checkReviewerTrustScore(UUID reviewerId) {
+        WorkerProfileEntity profile = workerProfileRepository.findById(reviewerId)
+                .orElseGet(() -> new WorkerProfileEntity(reviewerId)); // новый профиль = 100 по умолчанию
+
+        int score = profile.getTrustScore() != null ? profile.getTrustScore() : TRUST_SCORE_START;
+
+        if (score < REVIEWER_MIN_TRUST_SCORE) {
+            throw new ApiForbiddenException(
+                    "Reviewers must have a Trust Score of 70 or higher. Your current score: " + score
+            );
+        }
+    }
 }

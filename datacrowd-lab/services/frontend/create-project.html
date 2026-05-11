@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DataCrowd Lab — Create Project</title>
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>DataCrowd Lab — Create Project</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <nav>
@@ -32,7 +32,7 @@
       <input id="name" class="inp" placeholder="e.g., Customer Feedback Classification">
     </div>
     <div class="fg">
-      <label class="lbl">Description (optional)</label>
+      <label class="lbl">Description</label>
       <input id="desc" class="inp" placeholder="Brief description of what needs to be labeled">
     </div>
     <div class="fg">
@@ -53,21 +53,12 @@
   </div>
 
   <div class="card mt14">
-    <div class="ctitle">Worker Instructions</div>
-    <div class="cdesc">Provide clear instructions workers will follow to complete tasks</div>
-    <div class="fg" style="margin-bottom:0">
-      <label class="lbl">Instructions</label>
-      <textarea id="instr" class="ta" placeholder="Enter detailed instructions for workers..."></textarea>
-    </div>
-  </div>
-
-  <div class="card mt14">
     <div class="ctitle">Upload Dataset</div>
     <div class="cdesc">Upload a CSV file — tasks will be generated after payment</div>
     <div class="uzone" id="uzone" onclick="document.getElementById('fi').click()"
-      ondragover="event.preventDefault();this.classList.add('over')"
-      ondragleave="this.classList.remove('over')"
-      ondrop="onDrop(event)">
+         ondragover="event.preventDefault();this.classList.add('over')"
+         ondragleave="this.classList.remove('over')"
+         ondrop="onDrop(event)">
       <div class="uico">↑</div>
       <div style="font-weight:600;margin-bottom:4px" id="utxt">Drag and Drop your CSV file here</div>
       <div style="font-size:12px;color:var(--ts)">or click to browse · CSV, JSONL, ZIP folder</div>
@@ -85,7 +76,7 @@
     <div class="fg">
       <label class="lbl">Reviewers per task: <span id="revVal" style="color:var(--p);font-weight:600">1 worker</span></label>
       <input type="range" id="revSlider" min="1" max="5" value="1"
-        oninput="document.getElementById('revVal').textContent=this.value+' worker'+(this.value>1?'s':'')">
+             oninput="document.getElementById('revVal').textContent=this.value+' worker'+(this.value>1?'s':'')">
       <div class="hint">Higher redundancy = better accuracy. 1 reviewer recommended for demos.</div>
     </div>
     <div class="fg" style="margin-bottom:0">
@@ -102,69 +93,69 @@
 </div>
 
 <script>
-const API = 'http://localhost:8080/api';
-const tok = localStorage.token;
-if (!tok) location.href = 'index.html';
-document.getElementById('uname').textContent = localStorage.uname || '';
-function logout() { localStorage.clear(); location.href = 'index.html'; }
-const H = () => ({ 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json' });
+  const API = 'http://localhost:8080/api';
+  const tok = localStorage.token;
+  if (!tok) location.href = 'index.html';
+  document.getElementById('uname').textContent = localStorage.uname || '';
+  function logout() { localStorage.clear(); location.href = 'index.html'; }
+  const H = () => ({ 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json' });
 
-let file = null;
-function onDrop(e) { e.preventDefault(); document.getElementById('uzone').classList.remove('over'); const f = e.dataTransfer.files[0]; if(f) setFile(f); }
-function onFileSelect(e) { if(e.target.files[0]) setFile(e.target.files[0]); }
-function setFile(f) { file=f; document.getElementById('utxt').textContent='✓ File ready'; document.getElementById('fname').textContent=f.name+' ('+(f.size/50024).toFixed(1)+' KB)'; document.getElementById('finfo').classList.remove('hide'); }
-function clearFile() { file=null; document.getElementById('utxt').textContent='Drag and Drop your CSV file here'; document.getElementById('finfo').classList.add('hide'); document.getElementById('fi').value=''; }
-function showMsg(type,msg) { const b=document.getElementById('msg'); b.className='alert '+(type==='ok'?'a-ok':type==='info'?'a-info':'a-err'); b.textContent=(type==='ok'?'✓ ':type==='info'?'ℹ ':'⚠ ')+msg; b.scrollIntoView({behavior:'smooth'}); }
+  let file = null;
+  function onDrop(e) { e.preventDefault(); document.getElementById('uzone').classList.remove('over'); const f = e.dataTransfer.files[0]; if(f) setFile(f); }
+  function onFileSelect(e) { if(e.target.files[0]) setFile(e.target.files[0]); }
+  function setFile(f) { file=f; document.getElementById('utxt').textContent='✓ File ready'; document.getElementById('fname').textContent=f.name+' ('+(f.size/50024).toFixed(1)+' KB)'; document.getElementById('finfo').classList.remove('hide'); }
+  function clearFile() { file=null; document.getElementById('utxt').textContent='Drag and Drop your CSV file here'; document.getElementById('finfo').classList.add('hide'); document.getElementById('fi').value=''; }
+  function showMsg(type,msg) { const b=document.getElementById('msg'); b.className='alert '+(type==='ok'?'a-ok':type==='info'?'a-info':'a-err'); b.textContent=(type==='ok'?'✓ ':type==='info'?'ℹ ':'⚠ ')+msg; b.scrollIntoView({behavior:'smooth'}); }
 
-async function launch() {
-  const btn = document.getElementById('btn');
-  const name = document.getElementById('name').value.trim();
-  const desc = document.getElementById('desc').value.trim();
-  const dataType = document.getElementById('dtype').value;
-  const reviewersCount = +document.getElementById('revSlider').value;
-  const rewardPoints = +document.getElementById('reward').value || 10;
-  const minAnswerSeconds = +document.getElementById('minSec').value || 3;
+  async function launch() {
+    const btn = document.getElementById('btn');
+    const name = document.getElementById('name').value.trim();
+    const desc = document.getElementById('desc').value.trim();
+    const dataType = document.getElementById('dtype').value;
+    const reviewersCount = +document.getElementById('revSlider').value;
+    const rewardPoints = +document.getElementById('reward').value || 10;
+    const minAnswerSeconds = +document.getElementById('minSec').value || 3;
 
-  if (!name) { showMsg('err', 'Please enter a project name'); return; }
+    if (!name) { showMsg('err', 'Please enter a project name'); return; }
 
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spin"></span> Creating project...';
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spin"></span> Creating project...';
 
-  try {
-    // Step 1: Create project
-    const r = await fetch(`${API}/core/projects`, {
-      method: 'POST', headers: H(),
-      body: JSON.stringify({ name, description: desc||null, dataType, reviewersCount, rewardPoints, minAnswerSeconds })
-    });
-    const p = await r.json();
-    if (!r.ok) throw new Error(p.message || p.detail || 'Failed to create project');
-    const projectId = p.id;
-
-    // Step 2: Upload dataset (store datasetId for after payment)
-    if (file) {
-      btn.innerHTML = '<span class="spin"></span> Uploading dataset...';
-      const fd = new FormData();
-      fd.append('file', file);
-      const ur = await fetch(`${API}/core/projects/${projectId}/datasets`, {
-        method: 'POST', headers: { 'Authorization': 'Bearer ' + tok }, body: fd
+    try {
+      // Step 1: Create project
+      const r = await fetch(`${API}/core/projects`, {
+        method: 'POST', headers: H(),
+        body: JSON.stringify({ name, description: desc||null, dataType, reviewersCount, rewardPoints, minAnswerSeconds })
       });
-      const ud = await ur.json();
-      if (!ur.ok) throw new Error(ud.message || ud.detail || 'Dataset upload failed');
+      const p = await r.json();
+      if (!r.ok) throw new Error(p.message || p.detail || 'Failed to create project');
+      const projectId = p.id;
 
-      // Save datasetId so payment page can trigger generation after payment
-      localStorage.setItem('pendingDatasetId', ud.id);
-      localStorage.setItem('pendingProjectId', projectId);
+      // Step 2: Upload dataset (store datasetId for after payment)
+      if (file) {
+        btn.innerHTML = '<span class="spin"></span> Uploading dataset...';
+        const fd = new FormData();
+        fd.append('file', file);
+        const ur = await fetch(`${API}/core/projects/${projectId}/datasets`, {
+          method: 'POST', headers: { 'Authorization': 'Bearer ' + tok }, body: fd
+        });
+        const ud = await ur.json();
+        if (!ur.ok) throw new Error(ud.message || ud.detail || 'Dataset upload failed');
+
+        // Save datasetId so payment page can trigger generation after payment
+        localStorage.setItem('pendingDatasetId', ud.id);
+        localStorage.setItem('pendingProjectId', projectId);
+      }
+
+      showMsg('ok', 'Project created! Redirecting to payment...');
+      setTimeout(() => location.href = 'payment.html?id=' + projectId, 800);
+
+    } catch (e) {
+      showMsg('err', e.message);
+      btn.disabled = false;
+      btn.textContent = 'Launch Project';
     }
-
-    showMsg('ok', 'Project created! Redirecting to payment...');
-    setTimeout(() => location.href = 'payment.html?id=' + projectId, 800);
-
-  } catch (e) {
-    showMsg('err', e.message);
-    btn.disabled = false;
-    btn.textContent = 'Launch Project';
   }
-}
 </script>
 </body>
 </html>

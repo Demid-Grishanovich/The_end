@@ -27,49 +27,52 @@ Table 5.6. `projects` table — `core_db`
 
 | Column | Type | Constraints | Description |
 |---|---|---|---|
-| `id` | UUID | PK, NOT NULL | Auto-generated via `uuid_generate_v4()`. |
-| `owner_user_id` | UUID | NOT NULL | Logical reference to `auth_db.users.id`. No database-level FK. |
+| `id` | UUID | PK, NOT NULL | Auto-generated identifier. |
 | `name` | VARCHAR(255) | NOT NULL | Human-readable project name. |
-| `data_type` | VARCHAR(32) | NOT NULL | Enum: `TEXT`, `IMAGE`, `AUDIO`, `CODE`, `MATH`. Determines task payload schema and export column structure. |
-| `status` | VARCHAR(32) | NOT NULL DEFAULT `'NEW'` | Lifecycle state: `NEW` → `ACTIVE` → `COMPLETED` → `ARCHIVED`. |
-| `billing_status` | VARCHAR(32) | NOT NULL DEFAULT `'UNPAID'` | `UNPAID` or `PAID`. Tasks are claimable only when `PAID`. |
-| `reviewers_count` | INT | NOT NULL DEFAULT `1` | Number of independent approvals required for consensus. `0` = auto-approve. |
-| `reward_points` | INT | NOT NULL DEFAULT `5` | Points awarded to a worker on answer approval. |
-| `task_quota` | INT | NOT NULL DEFAULT `0` | Maximum claimable tasks. Incremented by the billing grant. |
-| `min_answer_seconds` | INT | NOT NULL DEFAULT `3` | Minimum elapsed time (seconds) between task lock and answer submission. |
-| `description` | TEXT | NULL | Optional project description visible to workers on the available-projects endpoint. |
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT `now()` | Set on INSERT. |
-| `updated_at` | TIMESTAMPTZ | NOT NULL | Updated by Hibernate `@UpdateTimestamp`. |
+| `description` | TEXT | NULL | Optional project description. |
+| `owner_user_id` | UUID | NULL | Logical reference to `auth_db.users.id`. No database-level FK. |
+| `status` | VARCHAR(50) | NOT NULL DEFAULT `'DRAFT'` | Lifecycle state (e.g., DRAFT, ACTIVE). |
+| `data_type` | VARCHAR(20) | NOT NULL DEFAULT `'TEXT'` | Type of data for the project. |
+| `billing_status` | VARCHAR(20) | NOT NULL DEFAULT `'UNPAID'` | `UNPAID` or `PAID`. Tasks are claimable only when PAID. |
+| `reviewers_count` | INT | NOT NULL DEFAULT `1` | Number of independent approvals required. |
+| `reward_points` | INT | NOT NULL DEFAULT `0` | Points awarded to a worker per task. |
+| `task_quota` | INT | NOT NULL DEFAULT `0` | Maximum claimable tasks. |
+| `min_answer_seconds` | INT | NOT NULL DEFAULT `3` | Minimum elapsed time (seconds) between lock and submit. |
+| `created_at` | TIMESTAMPTZ | NOT NULL | Set on INSERT. |
+| `updated_at` | TIMESTAMPTZ | NOT NULL | Updated by trigger or ORM. |
+
+*Index:* `idx_owner_user_id`
 
 Table 5.7. `tasks` table — `core_db`
 
 | Column | Type | Constraints | Description |
 |---|---|---|---|
-| `id` | UUID | PK, NOT NULL | Auto-generated. |
-| `dataset_id` | UUID | NOT NULL, FK → `datasets.id` | Parent dataset. |
-| `project_id` | UUID | NOT NULL, FK → `projects.id` | Owning project; denormalized for query performance. |
-| `payload_json` | TEXT | NOT NULL | Serialized JSON. Contains item content plus optional `aiSuggestedLabel` and `aiConfidence` fields from HuggingFace pre-annotation. |
-| `status` | VARCHAR(32) | NOT NULL DEFAULT `'NEW'` | State machine: `NEW` → `LOCKED` → `IN_REVIEW` → `APPROVED` \| `REJECTED`. |
-| `locked_by_user_id` | UUID | NULL | Logical reference to the worker currently holding the lock. Cleared on submit or unlock. |
-| `locked_at` | TIMESTAMPTZ | NULL | Timestamp of lock acquisition. Used for `minAnswerSeconds` bot-detection check. |
-| `is_honeypot` | BOOLEAN | NOT NULL DEFAULT `false` | If `true`, `correct_answer` is compared with the worker's submission for fraud detection. |
-| `correct_answer` | TEXT | NULL | Known correct answer for honeypot tasks. |
-| `batch_id` | UUID | NULL, FK → `task_batches.id` | Ingestion batch group for bulk-creation tracking. |
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT `now()` | Set on INSERT by Go-Runner bulk endpoint. |
+| `id` | UUID | PK, NOT NULL | Auto-generated identifier. |
+| `project_id` | UUID | FK → `projects.id` | Owning project. |
+| `dataset_id` | UUID | FK → `datasets.id` | Parent dataset. |
+| `title` | VARCHAR(255) | NULL | Short title for the task. |
+| `description` | TEXT | NULL | Detailed instructions or task description. |
+| `status` | VARCHAR(50) | NOT NULL DEFAULT `'NEW'` | State machine: `NEW`, `LOCKED`, `IN_REVIEW`, etc. |
+| `payload_json` | TEXT | NULL | Serialized JSON containing item content. |
+| `assigned_user_id` | UUID | NULL | User explicitly assigned to this task (if any). |
+| `locked_by_user_id` | UUID | NULL | Logical reference to the worker holding the lock. |
+| `locked_at` | TIMESTAMPTZ | NULL | Timestamp of lock acquisition. |
+| `created_at` | TIMESTAMPTZ | NOT NULL | Set on INSERT. |
+| `updated_at` | TIMESTAMPTZ | NOT NULL | Updated by trigger or ORM. |
 
-Index: `idx_tasks_status_locked ON tasks (status, locked_by_user_id, locked_at)` — covers the SKIP LOCKED queue query.
+*Index:* `idx_status_locked_by_user_id`
 
 Table 5.8. `users` table — `auth_db`
 
 | Column | Type | Constraints | Description |
 |---|---|---|---|
 | `id` | UUID | PK, NOT NULL | Auto-generated via `uuid_generate_v4()`. |
-| `username` | VARCHAR(64) | UNIQUE, NOT NULL | Validated for uniqueness at the application layer before INSERT. |
-| `email` | VARCHAR(255) | UNIQUE, NOT NULL | PII. Exposed only through the `v_users_masked` view (first 2 chars + `****@domain`). |
-| `password_hash` | VARCHAR(255) | NOT NULL | BCrypt hash generated by `BCryptPasswordEncoder`. Never logged or returned in API responses. |
-| `role` | VARCHAR(50) | NOT NULL | `CLIENT`, `WORKER`, `REVIEWER`, or `ADMIN`. Mutable only via the internal role-change endpoint. |
-| `status` | VARCHAR(16) | NOT NULL DEFAULT `'ACTIVE'` | `ACTIVE` or `DISABLED`. Soft-delete semantics; row is never physically deleted. |
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT `now()` | Set on INSERT. |
+| `username` | VARCHAR(64) | NOT NULL, UNIQUE | User's display name. |
+| `email` | VARCHAR(255) | NOT NULL, UNIQUE | User's login credential. |
+| `password_hash` | VARCHAR(255) | NOT NULL | BCrypt hash. |
+| `role` | VARCHAR(50) | NOT NULL | E.g., `CLIENT`, `WORKER`, `REVIEWER`. |
+| `status` | VARCHAR(16) | NOT NULL DEFAULT `'ACTIVE'` | Account status (`ACTIVE` or `DISABLED`). |
+| `created_at` | TIMESTAMPTZ | NOT NULL | Set on INSERT. |
 | `updated_at` | TIMESTAMPTZ | NOT NULL | Maintained by trigger `trg_users_set_updated_at`. |
 
 ---
@@ -78,15 +81,18 @@ Table 5.9. Entity relationships
 
 | Relationship | Type | Description |
 |---|---|---|
-| `users` → `projects` (via `owner_user_id`) | One-to-Many | One client user owns zero or more projects. Reference is logical (no database-level FK). |
-| `projects` → `datasets` | One-to-Many | One project contains one or more uploaded datasets. |
-| `datasets` → `tasks` | One-to-Many | One dataset generates one or more atomic labeling tasks via the Go-Runner. |
-| `tasks` → `answers` | One-to-Many | One task may receive multiple answer attempts (e.g., if rejected and re-queued). |
-| `answers` → `reviews` | One-to-Many | One answer receives up to `reviewersCount` review decisions. |
-| `users` → `worker_profiles` (via `worker_id`) | One-to-One | One worker has exactly one Trust Score profile. Created lazily on first submission. |
-| `tasks` → `points_ledger` | One-to-Many | One approved task produces one ledger credit entry per worker (idempotent). |
-| `datasets` → `failed_items` | One-to-Many | One dataset may produce zero or more DLQ entries for unparseable rows. |
-| `users` → `audit_logs` (via `actor_id`) | One-to-Many | All sensitive state transitions are immutably recorded per acting user. |
+| `users` → `projects` | One-to-Many | Client owns projects (via `owner_user_id`). Logical reference. |
+| `projects` → `datasets` | One-to-Many | Project contains uploaded datasets. |
+| `projects` → `tasks` | One-to-Many | Project contains labeling tasks. |
+| `datasets` → `tasks` | One-to-Many | Dataset generates atomic labeling tasks. |
+| `datasets` → `failed_items` | One-to-Many | Dataset generates DLQ entries for unparseable rows. |
+| `tasks` → `answers` | One-to-Many | Task receives answer attempts. |
+| `answers` → `reviews` | One-to-Many | Answer receives review decisions. |
+| `users` → `worker_profiles`| One-to-One | Worker has a Trust Score profile (via `worker_id`). |
+| `users` → `answers` | One-to-Many | Worker submits answers (via `user_id`). Logical reference. |
+| `users` → `reviews` | One-to-Many | Reviewer creates reviews (via `reviewer_id`). Logical reference. |
+| `tasks` → `points_ledger` | One-to-Many | Task produces ledger credit entries. |
+| `payments` → `ledger` | One-to-Many | Payment generates financial journal entries (DEPOSIT, CHARGE, etc.). |
 
 ---
 
@@ -96,10 +102,10 @@ Table 5.10. Flyway migration history — `core-service`
 |---|---|---|
 | V1 | Base schema: `projects`, `datasets`, `tasks`, `answers`, `reviews`. | 2025-11-10 |
 | V2 | Add `owner_user_id`, `billing_status`, `task_quota`, `reviewers_count`, `data_type` to `projects`. | 2025-11-18 |
-| V5 | Performance indexes: `idx_tasks_status_locked` on `tasks(status, locked_by_user_id, locked_at)`; `idx_answers_status_created` on `answers(status, created_at)`. | 2025-12-05 |
+| V5 | Performance indexes: `idx_status_locked_by_user_id` on `tasks`; views for masking. | 2025-12-05 |
 | V7 | ZIP dataset support: add `source_type` and `manifest_path` columns to `datasets`. | 2025-12-20 |
-| V9 | Add `min_answer_seconds` to `projects`; add `is_honeypot` and `correct_answer` to `tasks`. | 2026-01-08 |
-| V10 | Create `failed_items` Dead Letter Queue table with indexes on `(dataset_id)` and `(created_at DESC)`. | 2026-01-15 |
-| V11 | Create immutable `audit_logs` table with indexes on `(actor_id)`, `(entity_type, entity_id)`, `(created_at DESC)`. | 2026-01-22 |
-| V13 | Create `worker_profiles` table for Trust Score persistence; backfill existing workers with default score 100. | 2026-02-10 |
-| V14 | Create `exports` table for materialised export file references (`project_id`, `dataset_id`, `format`, `status`, `file_path`). | 2026-02-20 |
+| V9 | Add `min_answer_seconds` to `projects`. | 2026-01-08 |
+| V10 | Create `failed_items` Dead Letter Queue table. | 2026-01-15 |
+| V11 | Create immutable `audit_logs` table. | 2026-01-22 |
+| V13 | Create `worker_profiles` table for Trust Score persistence. | 2026-02-10 |
+| V14 | Create `exports` table for materialised export file references. | 2026-02-20 |
